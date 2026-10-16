@@ -3339,6 +3339,60 @@ template<int SG> struct DotG<23, SG> { __device__ static __forceinline__ float f
 template<int SG> struct DotG<42, SG> { __device__ static __forceinline__ float f(const void* vbq, const block_q8_1* bq8_1, int kbx, int iqs,
                                                       const uint32_t*) { return vec_dot_q2_0_q8_1(vbq, bq8_1, kbx, iqs); } };
 
+#if defined(STRATA_HIP_GFX906)
+// MI50-native Q2_0 activation image.  It occupies exactly one q8_1 block, so the
+// existing LDS budget is unchanged: four packed signed-i4 low planes, four
+// signed-i4 high planes and the original scale/sum.  For q8 value a,
+// a = low + 16*high + 8; v_dot8_i32_i4 can therefore consume the image without
+// rebuilding it for every expert row.
+struct Q2ActI4 {
+    uint32_t low[4];
+    uint32_t high[4];
+    half2 ds;
+};
+static_assert(sizeof(Q2ActI4) == sizeof(block_q8_1));
+
+__device__ __forceinline__ uint32_t q2_compress_nibbles(uint32_t x) {
+    x &= 0x0f0f0f0fu;
+    x = (x | (x >> 4)) & 0x00ff00ffu;
+    return (x | (x >> 8)) & 0x0000ffffu;
+}
+
+__device__ __forceinline__ uint32_t q2_spread_i4(uint32_t q) {
+    q = (q | (q << 8)) & 0x00ff00ffu;
+    q = (q | (q << 4)) & 0x0f0f0f0fu;
+    q = (q | (q << 2)) & 0x33333333u;
+    return ((q | 0x88888888u) - 0x11111111u) ^ 0x88888888u;
+}
+
+__device__ __forceinline__ void q2_stage_i4(const block_q8_1* src, Q2ActI4* dst) {
+    const uint32_t* q = reinterpret_cast<const uint32_t*>(src->qs);
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+        const uint32_t a = q[2 * j + 0], b = q[2 * j + 1];
+        dst->low[j] = (q2_compress_nibbles(a) | (q2_compress_nibbles(b) << 16)) ^ 0x88888888u;
+        dst->high[j] = q2_compress_nibbles(a >> 4) | (q2_compress_nibbles(b >> 4) << 16);
+    }
+    dst->ds = src->ds;
+}
+
+__device__ __forceinline__ float q2_dot_i4(const void* __restrict__ vbq, const Q2ActI4* __restrict__ x,
+                                           int kbx, int iqs) {
+    const block_q2_0* bq2 = static_cast<const block_q2_0*>(vbq) + kbx;
+    const uint16_t* raw = reinterpret_cast<const uint16_t*>(bq2->qs) + iqs * 4;
+    int sumi = 0;
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+        const uint32_t q = raw[j];
+        const uint32_t w = q2_spread_i4(q);
+        const int sumw = __popc(q & 0x5555u) + 2 * __popc(q & 0xaaaau) - 8;
+        sumi = amd_mixed_dot(static_cast<int>(w), static_cast<int>(x->low[j]), sumi, false);
+        sumi += 16 * amd_mixed_dot(static_cast<int>(w), static_cast<int>(x->high[j]), 0, false) + 8 * sumw;
+    }
+    return bq2->d * __low2float(x->ds) * sumi;
+}
+#endif
+
 constexpr int LDS_RB = 64;    // gate/up rows per block (4 R2 passes of 16)
 constexpr int LDS_NT = 4;     // entries whose activations sit in LDS at once
 
@@ -3363,6 +3417,9 @@ __global__ void __launch_bounds__(256) native_gu_lds_kernel(const unsigned long 
     const int e0 = grp_start[g], e1 = grp_start[g + 1];
     const int nrow = 2 * (int) L.n_ff;
     const block_q8_1* sx = (const block_q8_1*) sx_raw;
+#if defined(STRATA_HIP_GFX906)
+    const Q2ActI4* sx_i4 = reinterpret_cast<const Q2ActI4*>(sx_raw);
+#endif
     auto wrow = [&](int row) -> const uint8_t* {
         const bool is_up = row >= L.n_ff;
         return blob + (is_up ? L.up_off : 0) + (size_t) (is_up ? row - (int) L.n_ff : row) * L.gu_row;
@@ -3375,6 +3432,14 @@ __global__ void __launch_bounds__(256) native_gu_lds_kernel(const unsigned long 
         const int cn = min(LDS_NT, e1 - c0);
         __syncthreads();
         for (int j = 0; j < cn; ++j) {
+#if defined(STRATA_HIP_GFX906)
+            if constexpr (TG == 42) {
+                const block_q8_1* src = xq + (size_t) ent_tok[c0 + j] * xb;
+                Q2ActI4* dst = reinterpret_cast<Q2ActI4*>(sx_raw) + (size_t) j * xb;
+                for (int i = tid; i < xb; i += 256) q2_stage_i4(src + i, dst + i);
+                continue;
+            }
+#endif
             const int* src = (const int*) (xq + (size_t) ent_tok[c0 + j] * xb);
             for (int i = tid; i < xb * 9; i += 256) sx_raw[j * xb * 9 + i] = src[i];
         }
@@ -3393,6 +3458,17 @@ __global__ void __launch_bounds__(256) native_gu_lds_kernel(const unsigned long 
                     for (int j = 0; j < NTC; ++j) { s0[j] = 0.0f; s1[j] = 0.0f; }
                     for (int k = lane; k < nb * F::ipb; k += 32) {
                         const int kbx = k / F::ipb, iqs = F::step * (k % F::ipb);
+#if defined(STRATA_HIP_GFX906)
+                        if constexpr (TG == 42) {
+#pragma unroll
+                            for (int j = 0; j < NTC; ++j) {
+                                const Q2ActI4* xk = sx_i4 + (size_t) j * xb + kbx * (F::qk / 32) + iqs;
+                                s0[j] += q2_dot_i4(w0, xk, kbx, iqs);
+                                s1[j] += q2_dot_i4(w1, xk, kbx, iqs);
+                            }
+                            continue;
+                        }
+#endif
 #pragma unroll
                         for (int j = 0; j < NTC; ++j) {
                             const block_q8_1* xk = sx + (size_t) j * xb + kbx * (F::qk / 32);
@@ -3421,6 +3497,14 @@ __global__ void __launch_bounds__(256) native_gu_lds_kernel(const unsigned long 
                 float s0 = 0.0f, s1 = 0.0f;
                 for (int k = lane; k < nb * F::ipb; k += 32) {
                     const int kbx = k / F::ipb, iqs = F::step * (k % F::ipb);
+#if defined(STRATA_HIP_GFX906)
+                    if constexpr (TG == 42) {
+                        const Q2ActI4* xk = sx_i4 + (size_t) j * xb + kbx * (F::qk / 32) + iqs;
+                        s0 += q2_dot_i4(w0, xk, kbx, iqs);
+                        s1 += q2_dot_i4(w1, xk, kbx, iqs);
+                        continue;
+                    }
+#endif
                     const block_q8_1* xk = x + kbx * (F::qk / 32);
                     const float a = DotG<TG, SG>::f(w0, xk, kbx, iqs, sgrid);
                     const float b = DotG<TG, SG>::f(w1, xk, kbx, iqs, sgrid);
