@@ -160,6 +160,29 @@ The current `--spec 4 --spec-min-p 0.5` remains the best tested point. A
 single 32 GB MI50 rather than a two-GPU layer split; the engine correctly left
 the feature off and no timing was attributed to it.
 
+### Decode profile and Q8_0 dense GEMV geometry
+
+A refreshed GPU-stage profile confirmed that warm decode is GPU-bound. CPU
+experts and PCIe expert traffic were effectively zero. Representative GDN
+stage costs per verify window included about 3.0 ms for Q8 QKV GEMV, 2.8 ms for
+router/plan/doorbell, 2.1 ms for the head, 1.9 ms for `z`, 1.9 ms for
+shared+quant, and 1.7 ms for the output projection. This explains why a 3%
+isolated expert-kernel gain can disappear in end-to-end generation.
+
+The documented `STRATA_NO_MMVQ_ROWS2=1` override was found not to force the
+single-output-row Q8_0 geometry on unrecognized architectures: it still applied
+the gfx12/sm86 allow-list. The override now honors its documented meaning. Both
+MMVQ multi-column parity tests pass with the override off and on; default device
+selection is unchanged.
+
+The corrected override was used to measure the real model shapes on gfx906. At
+the common two- and three-column sizes, one-row blocks improved GDN QKV by
+3.1-4.8% and GDN gate by 6.0-8.3%. The result was not general: QSA `q` changed
+by +1.0%/-2.3%, the vocabulary head slowed 1.3-1.8%, and several small shapes
+were noisy or materially slower. The estimated model-level contribution is
+below the 3% acceptance threshold, so gfx906 keeps the two-row default and the
+override remains an explicit diagnostic control.
+
 ## Reproduction guidance
 
 Build with the native gfx906 target and avoid compiling unsupported optional
