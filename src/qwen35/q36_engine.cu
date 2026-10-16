@@ -1485,7 +1485,7 @@ struct Engine {
                                             n_groups, ent_dst, ent_tok);
             quant(h, N, T, xq);   // the experts' and the shared expert's input
             K::native_expert_grouped(L.L, grp_ptr, grp_start, n_groups, ent_dst, ent_tok,
-                                     std::min<int64_t>(n_ent, g.n_expert), n_ent, xq, escr, eparts, st, 0, T);
+                                     std::min<int64_t>(n_ent, g.n_expert), n_ent, xq, escr, eparts, st);
         }
         // the shared expert, scaled by sigmoid(w . h)
         if (T > kGemmT) k_to_f16<<<grid1((int64_t) N * T), kThreads, 0, st>>>(h, x16, (int64_t) N * T);
@@ -1635,7 +1635,7 @@ struct Engine {
                                            grp_ptr, grp_start, n_groups, ent_dst, ent_tok);
         quant(h, N, T, xq);   // the experts' and the shared expert's input
         K::native_expert_grouped(L.L, grp_ptr, grp_start, n_groups, ent_dst, ent_tok,
-                                 std::min<int64_t>(n_ent, g.n_expert), n_ent, xq, escr, eparts, st, 0, T);
+                                 std::min<int64_t>(n_ent, g.n_expert), n_ent, xq, escr, eparts, st);
     }
     /// The CPU half: the entries without a slot on the pool (ggml-cpu's arithmetic for the layer's formats), their
     /// rows uploaded and merged into the entries' rows.
