@@ -1298,6 +1298,7 @@ bool q8_0_rows1(int n_in, int n_out) {
             return v == nullptr || v[0] == '\0' ? -1 : v[0] != '0';
         }();
         if (env == 0) return false;
+        if (env == 1) return true;
         const int c = dev_class();
         return (c == 1 && n_in <= 4096 && n_out >= 4096) || (c == 2 && n_out >= 2048);
     }
