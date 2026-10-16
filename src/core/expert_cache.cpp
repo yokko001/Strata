@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <utility>
 #include <cstring>
+#include <limits>
 
 namespace strata::core {
 
@@ -444,7 +445,7 @@ bool ExpertCache::grow(int64_t want_bytes, std::string& err) {
 #endif
 }
 
-#if defined(STRATA_USE_HIP)
+#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)
 bool ExpertCache::ensure_blocking_staging(std::size_t bytes, std::string& err) {
     if (bytes <= blocking_staging_bytes_) return true;
     void* next = nullptr;
@@ -456,6 +457,32 @@ bool ExpertCache::ensure_blocking_staging(std::size_t bytes, std::string& err) {
     if (blocking_staging_) (void) cudaFreeHost(blocking_staging_);
     blocking_staging_ = static_cast<uint8_t*>(next);
     blocking_staging_bytes_ = bytes;
+    return true;
+}
+
+bool ExpertCache::ensure_queued_staging(std::size_t bytes, std::string& err) {
+    if (queued_staging_ != nullptr && bytes <= queued_staging_stride_) return true;
+    if (bytes == 0 || bytes > std::numeric_limits<std::size_t>::max() / kQueuedStagingSlots) {
+        err = "ExpertCache: HIP queued staging size overflow";
+        return false;
+    }
+    if (queued_staging_pending_ != 0) {
+        const cudaError_t sync_status = cudaStreamSynchronize((cudaStream_t) 0);
+        if (sync_status != cudaSuccess) {
+            err = std::string("ExpertCache: HIP queued staging sync: ") + cudaGetErrorString(sync_status);
+            return false;
+        }
+        queued_staging_pending_ = 0;
+    }
+    void* next = nullptr;
+    const cudaError_t status = cudaHostAlloc(&next, bytes * kQueuedStagingSlots, cudaHostAllocDefault);
+    if (status != cudaSuccess) {
+        err = std::string("ExpertCache: HIP queued staging allocation: ") + cudaGetErrorString(status);
+        return false;
+    }
+    if (queued_staging_) (void) cudaFreeHost(queued_staging_);
+    queued_staging_ = static_cast<uint8_t*>(next);
+    queued_staging_stride_ = bytes;
     return true;
 }
 #endif
@@ -538,7 +565,7 @@ bool ExpertCache::open(int64_t n_slots, int64_t n_layers, int64_t n_expert, int6
     n_layers_ = n_layers;
     n_expert_ = n_expert;
     blob_ = blob_bytes;
-#if defined(STRATA_USE_HIP)
+#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)
     if (!ensure_blocking_staging((std::size_t) blob_, err)) {
         close();
         return false;
@@ -574,7 +601,7 @@ bool ExpertCache::open_sized(const std::vector<int64_t>& slot_bytes, int64_t n_l
     live_slots_ = slots_;
     blob_ = mx;
     off_ = std::move(off);
-#if defined(STRATA_USE_HIP)
+#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)
     if (!ensure_blocking_staging((std::size_t) blob_, err)) {
         close();
         return false;
@@ -592,10 +619,14 @@ bool ExpertCache::open_sized(const std::vector<int64_t>& slot_bytes, int64_t n_l
 }
 
 void ExpertCache::close() {
-#if defined(STRATA_USE_HIP)
+#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)
     if (blocking_staging_) (void) cudaFreeHost(blocking_staging_);
     blocking_staging_ = nullptr;
     blocking_staging_bytes_ = 0;
+    if (queued_staging_) (void) cudaFreeHost(queued_staging_);
+    queued_staging_ = nullptr;
+    queued_staging_stride_ = 0;
+    queued_staging_pending_ = 0;
 #endif
     off_.clear();
     if (!segs_.empty()) {
@@ -700,7 +731,7 @@ bool ExpertCache::fill_slot_blocking(int32_t slot, const uint8_t* host_blob, std
         err = "ExpertCache::fill_slot_blocking: the host blob is null";
         return false;
     }
-#if defined(STRATA_USE_HIP)
+#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)
     // Bound HIP's pageable-source staging to one expert instead of repeatedly
     // registering regions of the mmap. The blocking copy completes before reuse.
     if (!blocking_staging_ || n > blocking_staging_bytes_) {
@@ -728,11 +759,29 @@ bool ExpertCache::fill_slot_queued(int32_t slot, const uint8_t* host_blob, std::
                              : "ExpertCache::fill_slot_queued: the host blob is null";
         return false;
     }
+#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)
+    if (!ensure_queued_staging(n, err)) return false;
+    if (queued_staging_pending_ == kQueuedStagingSlots) {
+        const cudaError_t sync_status = cudaStreamSynchronize((cudaStream_t) 0);
+        if (sync_status != cudaSuccess) {
+            err = std::string("ExpertCache::fill_slot_queued sync: ") + cudaGetErrorString(sync_status);
+            return false;
+        }
+        queued_staging_pending_ = 0;
+    }
+    uint8_t* staging = queued_staging_ + queued_staging_pending_ * queued_staging_stride_;
+    std::memcpy(staging, host_blob, n);
+    const cudaError_t e = cudaMemcpyAsync(dst, staging, n, cudaMemcpyHostToDevice, (cudaStream_t) 0);
+#else
     const cudaError_t e = cudaMemcpyAsync(dst, host_blob, n, cudaMemcpyHostToDevice, (cudaStream_t) 0);
+#endif
     if (e != cudaSuccess) {
         err = std::string("ExpertCache::fill_slot_queued: ") + cudaGetErrorString(e);
         return false;
     }
+#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)
+    ++queued_staging_pending_;
+#endif
     ++fills_;
     return true;
 }
@@ -743,6 +792,9 @@ bool ExpertCache::sync_queued(std::string& err) {
         err = std::string("ExpertCache::sync_queued: ") + cudaGetErrorString(e);
         return false;
     }
+#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)
+    queued_staging_pending_ = 0;
+#endif
     return true;
 }
 

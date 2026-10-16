@@ -210,10 +210,15 @@ public:
     uint64_t slot_offset(int64_t s) const { return off_.empty() ? (uint64_t) s * (uint64_t) blob_ : off_[(size_t) s]; }
 
 private:
-#if defined(STRATA_USE_HIP)
+#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906)
     bool ensure_blocking_staging(std::size_t bytes, std::string& err);
+    bool ensure_queued_staging(std::size_t bytes, std::string& err);
     uint8_t* blocking_staging_ = nullptr;
     std::size_t blocking_staging_bytes_ = 0;
+    static constexpr std::size_t kQueuedStagingSlots = 64;
+    uint8_t* queued_staging_ = nullptr;
+    std::size_t queued_staging_stride_ = 0;
+    std::size_t queued_staging_pending_ = 0;
 #endif
     int64_t slot_end(int64_t n) const { return off_.empty() ? n * blob_ : (int64_t) off_[(size_t) n]; }
     bool open_segmented(uint64_t want, std::string& err);
