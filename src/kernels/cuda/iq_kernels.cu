@@ -3645,7 +3645,7 @@ void native_grouped_set_v1(bool v1) { g_grouped_v1 = v1; }
 void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long* grp_ptr, const int32_t* grp_start,
                            const int32_t* n_groups, const int32_t* ent_dst, const int32_t* ent_tok, int64_t cap_groups,
                            int64_t cap_entries, const void* x_q8_1, void* scratch, float* out, void* stream,
-                           int64_t grid_groups) {
+                           int64_t grid_groups, int64_t token_rows) {
     if (cap_groups <= 0 || cap_entries <= 0) return;
     if (L.n_ff % 32 != 0) { std::fprintf(stderr, "native_expert_grouped: n_ff %lld\n", (long long) L.n_ff); std::exit(1); }
     cudaStream_t s = (cudaStream_t) stream;
@@ -3705,7 +3705,17 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     const dim3 ggu((unsigned) ((2 * L.n_ff + gu_rows - 1) / gu_rows), (unsigned) gy);
 #if STRATA_EXP_LAYOUTS
 #if defined(STRATA_HIP_GFX906)
-    const int em0 = exp_mode();
+    int em0 = exp_mode();
+    // A one-token Q2_0 decode has one entry per selected expert and cannot
+    // amortize mode 7's token-in-k-loop state.  On gfx906 mode 5 is faster for
+    // that shape; two or more token rows retain mode 7.  Override with
+    // STRATA_Q2_SINGLE_MODE=7 for an exact same-binary baseline.
+    static const int q2_single_mode = [] {
+        const char* v = std::getenv("STRATA_Q2_SINGLE_MODE");
+        return v && v[0] != '\0' ? std::atoi(v) : 5;
+    }();
+    if (token_rows == 1 && em0 == 7 && L.gu_type == 42 && q2_single_mode >= 5 && q2_single_mode <= 7)
+        em0 = q2_single_mode;
 #else
     // CUDA: the AMD layouts launch a block row per possible group, so a call that strides (a verify window's PCIe
     // call, grid_groups 1..cap) keeps the CUDA layout: V100, 0 groups 11.3 vs 6.5 us, 1 group of 2 29.6 vs 21.3
