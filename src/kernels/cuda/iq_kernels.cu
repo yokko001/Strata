@@ -3393,6 +3393,20 @@ __global__ void __launch_bounds__(256) native_gu_lds_kernel(const unsigned long 
                     for (int j = 0; j < NTC; ++j) { s0[j] = 0.0f; s1[j] = 0.0f; }
                     for (int k = lane; k < nb * F::ipb; k += 32) {
                         const int kbx = k / F::ipb, iqs = F::step * (k % F::ipb);
+                        if constexpr (TG == 42) {
+                            // gfx906 mode 7/8: Q2_0 weight expansion is invariant across the
+                            // entries resident in LDS.  Decode each gate/up row once and reuse
+                            // it for all entries instead of repeating the byte-permute chain.
+                            const auto rw0 = Split<42>::load(w0, kbx, iqs);
+                            const auto rw1 = Split<42>::load(w1, kbx, iqs);
+#pragma unroll
+                            for (int j = 0; j < NTC; ++j) {
+                                const block_q8_1* xk = sx + (size_t) j * xb + kbx * (F::qk / 32);
+                                s0[j] += Split<42>::apply(rw0, xk, iqs);
+                                s1[j] += Split<42>::apply(rw1, xk, iqs);
+                            }
+                            continue;
+                        }
 #pragma unroll
                         for (int j = 0; j < NTC; ++j) {
                             const block_q8_1* xk = sx + (size_t) j * xb + kbx * (F::qk / 32);
