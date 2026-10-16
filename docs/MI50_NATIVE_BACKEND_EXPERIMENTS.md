@@ -38,9 +38,9 @@ favored the existing mode 7 on every layer; output remained bitwise identical:
 
 | Layer | mode 7 | mode 5 | mode 5 change |
 |---:|---:|---:|---:|
-| 0 | 134.0 us | 138.7 us | +3.51% slower |
-| 23 | 133.9 us | 140.2 us | +4.70% slower |
-| 47 | 134.0 us | 137.8 us | +2.84% slower |
+| 0 | 133.5 us | 141.2 us | +5.77% slower |
+| 23 | 135.4 us | 141.9 us | +4.80% slower |
+| 47 | 132.1 us | 138.2 us | +4.62% slower |
 
 The end-to-end candidate also failed the acceptance threshold. After a fresh
 load and a discarded five-run warm-up, ten 256-token runs produced:
