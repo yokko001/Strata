@@ -1314,6 +1314,23 @@ if(STRATA_NATIVE_EXPERTS)
     if(NOT strata_llamacpp_POPULATED)
       FetchContent_Populate(strata_llamacpp)
     endif()
+    if(STRATA_HIP_GFX906)
+      # ROCm 6.2 reports HIP_VERSION 6.2, but its public headers do not define
+      # __hip_fp8_e4m3.  The pinned llama.cpp commit enabled that typedef at
+      # 6.2 and therefore cannot compile on the MI50 deployment toolchain.
+      # Keep the dependency pin intact and apply the same two-character guard
+      # correction used by the validated gfx906 build.
+      set(_strata_hip_vendor "${strata_llamacpp_SOURCE_DIR}/ggml/src/ggml-cuda/vendors/hip.h")
+      file(READ "${_strata_hip_vendor}" _strata_hip_vendor_text)
+      string(REPLACE "#if HIP_VERSION >= 60200000" "#if HIP_VERSION >= 60300000"
+                     _strata_hip_vendor_fixed "${_strata_hip_vendor_text}")
+      if(NOT _strata_hip_vendor_fixed STREQUAL _strata_hip_vendor_text)
+        file(WRITE "${_strata_hip_vendor}" "${_strata_hip_vendor_fixed}")
+      endif()
+      unset(_strata_hip_vendor_fixed)
+      unset(_strata_hip_vendor_text)
+      unset(_strata_hip_vendor)
+    endif()
     add_subdirectory(${strata_llamacpp_SOURCE_DIR}/ggml ${CMAKE_BINARY_DIR}/ggml EXCLUDE_FROM_ALL)
   endif()
   # part of strata_kernels_cpu (the pool calls these and they call its CPU probe: one library, so GNU ld's
