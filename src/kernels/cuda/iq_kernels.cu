@@ -3389,8 +3389,7 @@ __device__ __forceinline__ float q2_dot_i4(const void* __restrict__ vbq, const Q
         sumi = amd_mixed_dot(static_cast<int>(w), static_cast<int>(x->low[j]), sumi, false);
         sumi += 16 * amd_mixed_dot(static_cast<int>(w), static_cast<int>(x->high[j]), 0, false) + 8 * sumw;
     }
-    const float d2 = bq2->d;
-    return d2 * __low2float(x->ds) * sumi;
+    return bq2->d * __low2float(x->ds) * sumi;
 }
 #endif
 
