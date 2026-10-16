@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "target": {
+    "gpu": "AMD Instinct MI50 32 GB",
+    "architecture": "gfx906",
+    "compute_units": 60,
+    "wavefront": 64,
+    "rocm": "6.2.4",
+    "compiler": "clang 18"
+  },
+  "workload": {
+    "quantization": "Q2_0",
+    "expert_cache_entries": 20402,
+    "expert_cache_gib": 26.27,
+    "warmup_tokens": 32,
+    "generated_tokens_per_run": 256
+  },
+  "single_token_layout_microbench": {
+    "iterations": 120,
+    "token_rows": 1,
+    "groups": 18,
+    "bitwise_equal": true,
+    "layers": [
+      {"layer": 0, "mode7_us": 148.0, "mode5_us": 140.6, "improvement_percent": 5.26},
+      {"layer": 23, "mode7_us": 148.1, "mode5_us": 138.7, "improvement_percent": 6.78},
+      {"layer": 47, "mode7_us": 147.0, "mode5_us": 139.5, "improvement_percent": 5.38}
+    ]
+  },
+  "steady_generation": {
+    "runs_per_variant": 10,
+    "baseline_mode7": {
+      "median_tokens_per_second": 30.927,
+      "mean_tokens_per_second": 30.869,
+      "minimum_tokens_per_second": 29.022,
+      "maximum_tokens_per_second": 32.137
+    },
+    "candidate_mode5_for_one_token": {
+      "median_tokens_per_second": 31.269,
+      "mean_tokens_per_second": 30.582,
+      "minimum_tokens_per_second": 23.851,
+      "maximum_tokens_per_second": 32.133
+    },
+    "median_change_percent": 1.11,
+    "accepted_as_default": false,
+    "acceptance_threshold_percent": 3.0
+  },
+  "rejected_experiments": [
+    {"name": "reuse Q2_0 decode across grouped entries", "result": "0.6-1.5% isolated and inconsistent"},
+    {"name": "reuse Q2_0 decode in down projection", "result": "about 1% at T2; slower at T4 and T8"},
+    {"name": "fused gate/up activation quantization", "result": "8-11% slower"},
+    {"name": "staged packed dot8 activation path", "result": "slower at T2 and about 20% slower at T4 and T8"},
+    {"name": "pre-expanded Q2_0 pack", "result": "rejected on memory and transfer economics before implementation"}
+  ]
+}
