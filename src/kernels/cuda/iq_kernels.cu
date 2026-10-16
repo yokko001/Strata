@@ -3340,7 +3340,15 @@ template<int SG> struct DotG<42, SG> { __device__ static __forceinline__ float f
                                                       const uint32_t*) { return vec_dot_q2_0_q8_1(vbq, bq8_1, kbx, iqs); } };
 
 constexpr int LDS_RB = 64;    // gate/up rows per block (4 R2 passes of 16)
+// gfx906 decode usually has one entry per routed expert.  Keeping only that
+// entry resident cuts dynamic LDS from four activation rows to one; the loop
+// still covers larger groups one entry at a time without changing reduction
+// order or output bits.
+#if defined(STRATA_HIP_GFX906)
+constexpr int LDS_NT = 1;
+#else
 constexpr int LDS_NT = 4;     // entries whose activations sit in LDS at once
+#endif
 
 template<int TG, int SG, bool TI = false>
 __global__ void __launch_bounds__(256) native_gu_lds_kernel(const unsigned long long* __restrict__ grp_ptr,
