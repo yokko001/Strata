@@ -623,26 +623,28 @@ if(STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP)
   target_include_directories(strata PRIVATE ${_strata_gpu_include_directories})
   target_link_libraries(strata PRIVATE strata_engine strata_prefill strata_spec ${_strata_gpu_runtime_target})
 
-  # NEW-MODELS-PLAN.md T1: Qwen3.6-35B-A3B's reference path (one GPU, the model resident, plain kernels), checked
-  # against llama.cpp by tools/qwen35/; the engine itself does not run the family yet
-  add_executable(strata-q36ref src/qwen35/q36ref.cu)
-  target_include_directories(strata-q36ref PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${_strata_gpu_include_directories})
-  target_link_libraries(strata-q36ref PRIVATE strata_kernels strata_warnings ${_strata_gpu_runtime_target})
-  # the engine path for the same family (serve protocol, prompt chunks, decode graph): src/qwen35/q36_engine.cu, a
-  # library that `strata` switches to for a qwen35moe model (the family switch at the top of its main) and that
-  # strata-q36 wraps on its own
-  add_library(strata_qwen35 STATIC src/qwen35/q36_engine.cu)
-  target_include_directories(strata_qwen35 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${_strata_gpu_include_directories})
-  target_link_libraries(strata_qwen35 PRIVATE strata_prefill strata_kernels strata_warnings ${_strata_gpu_runtime_target})
-  if(STRATA_NATIVE_EXPERTS)
-    # the hybrid mode (experts that do not all fit in VRAM): the CPU expert pool on ggml-cpu's arithmetic
-    target_link_libraries(strata_qwen35 PRIVATE strata_kernels_cpu)
-    target_compile_definitions(strata_qwen35 PRIVATE STRATA_Q36_CPU_POOL=1)
+  if(NOT STRATA_HIP_GFX906)
+    # NEW-MODELS-PLAN.md T1: Qwen3.6-35B-A3B's reference path (one GPU, the model resident, plain kernels), checked
+    # against llama.cpp by tools/qwen35/; the engine itself does not run the family yet
+    add_executable(strata-q36ref src/qwen35/q36ref.cu)
+    target_include_directories(strata-q36ref PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${_strata_gpu_include_directories})
+    target_link_libraries(strata-q36ref PRIVATE strata_kernels strata_warnings ${_strata_gpu_runtime_target})
+    # the engine path for the same family (serve protocol, prompt chunks, decode graph): src/qwen35/q36_engine.cu, a
+    # library that `strata` switches to for a qwen35moe model (the family switch at the top of its main) and that
+    # strata-q36 wraps on its own
+    add_library(strata_qwen35 STATIC src/qwen35/q36_engine.cu)
+    target_include_directories(strata_qwen35 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${_strata_gpu_include_directories})
+    target_link_libraries(strata_qwen35 PRIVATE strata_prefill strata_kernels strata_warnings ${_strata_gpu_runtime_target})
+    if(STRATA_NATIVE_EXPERTS)
+      # the hybrid mode (experts that do not all fit in VRAM): the CPU expert pool on ggml-cpu's arithmetic
+      target_link_libraries(strata_qwen35 PRIVATE strata_kernels_cpu)
+      target_compile_definitions(strata_qwen35 PRIVATE STRATA_Q36_CPU_POOL=1)
+    endif()
+    add_executable(strata-q36 src/qwen35/q36_main.cpp)
+    target_link_libraries(strata-q36 PRIVATE strata_qwen35 ${_strata_gpu_runtime_target})
+    target_link_libraries(strata PRIVATE strata_qwen35)
+    target_compile_definitions(strata PRIVATE STRATA_HAVE_QWEN35=1)
   endif()
-  add_executable(strata-q36 src/qwen35/q36_main.cpp)
-  target_link_libraries(strata-q36 PRIVATE strata_qwen35 ${_strata_gpu_runtime_target})
-  target_link_libraries(strata PRIVATE strata_qwen35)
-  target_compile_definitions(strata PRIVATE STRATA_HAVE_QWEN35=1)
 
   if(STRATA_ENABLE_HIP)
     enable_testing()
@@ -1442,19 +1444,21 @@ if(STRATA_NATIVE_EXPERTS)
     # NVFP4: W4A8 (default) in mmq_nvfp4_w4a8.cu with the plain architectures; the opt-in W4A4 needs RTX 50's FP4 MMA,
     # which exists only in the arch-specific target, so its one unit alone is built with 12x -> 12xa (the default
     # binary is unchanged and runs on sm_121; a card without that image falls back to W4A8 at run time)
-    set(_strata_w4a4_archs ${CMAKE_CUDA_ARCHITECTURES})
-    # (two steps: CMake before 3.29 rejects a \2 whose optional group did not match, "120" alone)
-    list(TRANSFORM _strata_w4a4_archs REPLACE "^(12[0-9])$" "\\1a")
-    list(TRANSFORM _strata_w4a4_archs REPLACE "^(12[0-9])-(real|virtual)$" "\\1a-\\2")
-    add_library(strata_mmq_w4a4 STATIC src/prefill/mmq_nvfp4_w4a4.cu)
-    set_target_properties(strata_mmq_w4a4 PROPERTIES CUDA_ARCHITECTURES "${_strata_w4a4_archs}")
-    target_include_directories(strata_mmq_w4a4 PRIVATE ${_strata_gg}/include ${_strata_gg}/src ${_strata_mmq})
-    target_compile_options(strata_mmq_w4a4 PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda -use_fast_math>)
-    if(MSVC)
-      target_compile_options(strata_mmq_w4a4 PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/bigobj>)
+    if(NOT STRATA_HIP_GFX906)
+      set(_strata_w4a4_archs ${CMAKE_CUDA_ARCHITECTURES})
+      # (two steps: CMake before 3.29 rejects a \2 whose optional group did not match, "120" alone)
+      list(TRANSFORM _strata_w4a4_archs REPLACE "^(12[0-9])$" "\\1a")
+      list(TRANSFORM _strata_w4a4_archs REPLACE "^(12[0-9])-(real|virtual)$" "\\1a-\\2")
+      add_library(strata_mmq_w4a4 STATIC src/prefill/mmq_nvfp4_w4a4.cu)
+      set_target_properties(strata_mmq_w4a4 PROPERTIES CUDA_ARCHITECTURES "${_strata_w4a4_archs}")
+      target_include_directories(strata_mmq_w4a4 PRIVATE ${_strata_gg}/include ${_strata_gg}/src ${_strata_mmq})
+      target_compile_options(strata_mmq_w4a4 PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda -use_fast_math>)
+      if(MSVC)
+        target_compile_options(strata_mmq_w4a4 PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/bigobj>)
+      endif()
+      target_link_libraries(strata_mmq_w4a4 PUBLIC ggml-base ${_strata_gpu_runtime_target})
+      target_link_libraries(strata_mmq PRIVATE strata_mmq_w4a4)
     endif()
-    target_link_libraries(strata_mmq_w4a4 PUBLIC ggml-base ${_strata_gpu_runtime_target})
-    target_link_libraries(strata_mmq PRIVATE strata_mmq_w4a4)
     target_include_directories(strata_mmq PRIVATE ${_strata_gg}/include ${_strata_gg}/src ${_strata_mmq}
                                PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_options(strata_mmq PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda -use_fast_math>)
