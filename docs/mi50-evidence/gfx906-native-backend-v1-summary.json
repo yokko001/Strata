@@ -22,9 +22,9 @@
     "bitwise_equal": true,
     "initial_process_to_process_result_reproduced": false,
     "final_clean_build_layers": [
-      {"layer": 0, "mode7_us": 134.0, "mode5_us": 138.7, "mode5_slowdown_percent": 3.51},
-      {"layer": 23, "mode7_us": 133.9, "mode5_us": 140.2, "mode5_slowdown_percent": 4.70},
-      {"layer": 47, "mode7_us": 134.0, "mode5_us": 137.8, "mode5_slowdown_percent": 2.84}
+      {"layer": 0, "mode7_us": 133.5, "mode5_us": 141.2, "mode5_slowdown_percent": 5.77},
+      {"layer": 23, "mode7_us": 135.4, "mode5_us": 141.9, "mode5_slowdown_percent": 4.80},
+      {"layer": 47, "mode7_us": 132.1, "mode5_us": 138.2, "mode5_slowdown_percent": 4.62}
     ],
     "implementation_reverted": true
   },
