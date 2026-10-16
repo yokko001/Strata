@@ -1,0 +1,33 @@
+{
+  "source_commit": "296b59d2f73c8f04a805df29c2fa97655adace78",
+  "gpu": "AMD Instinct MI50 gfx906",
+  "rocm": "6.2.4",
+  "change": "Enable the existing LDS grouped gate/up kernel for GGML Q2_0 type 42",
+  "patch": "strata-mi50-v0139-eval/patches/gfx906-q2-lds-gate-up.patch",
+  "native_expert_bench": {
+    "layers": [0, 23, 47],
+    "groups": 18,
+    "tokens": 2,
+    "iterations": 40,
+    "differing_results": 0,
+    "bitwise_equal_layers": 3,
+    "baseline_all_us": [231.8, 244.9, 236.5],
+    "optimized_all_us": [149.2, 154.7, 155.8],
+    "baseline_gate_up_us": [115.6, 119.5, 117.4],
+    "optimized_gate_up_us": [89.0, 91.7, 88.7]
+  },
+  "tg256": {
+    "unmodified_current_main_median_tps": 30.503,
+    "optimized_steady_batch_medians_tps": [34.294, 33.93],
+    "improvement_percent": [12.43, 11.23]
+  },
+  "quality_33": {
+    "unmodified_scores": [25, 22],
+    "optimized_scores": [23, 24],
+    "unmodified_median": 23.5,
+    "optimized_median": 23.5,
+    "long_context": "2K, 8K and 16K passed in all four runs"
+  },
+  "final_service_state": "Strata stopped; one Qwen3-Coder llama-server; /health HTTP 200",
+  "upstream_pr_created": false
+}

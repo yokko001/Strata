@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "https://github.com/Niko1221/Strata.git",
+    "base_commit": "296b59d2f73c8f04a805df29c2fa97655adace78",
+    "release": "v0.1.44.1"
+  },
+  "target": {
+    "gpu": "AMD Instinct MI50 32 GB",
+    "architecture": "gfx906",
+    "wavefront_size": 64,
+    "rocm": "6.2.4",
+    "compiler": "AMD clang 18.0.0git"
+  },
+  "hash_policy": "SHA-256 after normalizing CRLF to LF",
+  "source_sha256": {
+    "CMakeLists.txt": "5db3ba7a39f255a9279a701cb192b9316539acee7cca9147a9919ec0746b6b18",
+    "include/strata/core/expert_cache.hpp": "7a6aa219b607b6f212982df177cd6eb630c6cf6601ef94ade9006441726873ba",
+    "src/core/expert_cache.cpp": "7f419810794371aa1c0041b0894d1711185f3670f3d0a621e62116f4a70d4fee",
+    "src/kernels/cuda/iq_kernels.cu": "f11a23da3839420931f2de73930809da109565c9a1de7af4bc616c27a628b163",
+    "src/kernels/cuda/qsa_select.cu": "ee14f97ce7014ea68e29f12da28eabe65a0bcc522e069804efebd05a169009eb",
+    "src/kernels/cuda/fused_gr.cu": "870be6e0282a9078682396045e4c46afffc19b2685c252cf1499e620d0a6751d"
+  }
+}

@@ -2,6 +2,11 @@
 
 **English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Español](README.es.md) · [Português](README.pt-BR.md)
 
+> **MI50 / gfx906 optimization fork:** this branch carries hardware-validated build fixes, a Q2_0 expert-kernel
+> optimization, and a wave64 Top-K correctness fix for AMD Instinct MI50-class GPUs. See
+> [MI50 / gfx906 optimization](docs/MI50_GFX906_OPTIMIZATION.md) for the exact base revision, build recipe,
+> measurements, validation gates, and rejected experiments. Other GPU backends are intended to remain unchanged.
+
 <p align="center"><b>Run a 125-billion-parameter AI model on your own gaming PC</b><br>
 NVIDIA or AMD graphics card (12 GB or more) · Windows or Linux · free and open source</p>
 
