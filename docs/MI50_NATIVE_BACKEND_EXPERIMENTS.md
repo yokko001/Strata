@@ -28,23 +28,22 @@ only one model occupied the GPU at a time.
 ## Single-token Q2_0 layout experiment
 
 Autoregressive decode commonly enters the grouped expert kernel with one token
-row and one entry per selected expert. For that shape, layout mode 5 avoids
-some of mode 7's token-in-K-loop bookkeeping. The native expert API now carries
-the explicit token-row count so this shape can be selected without guessing
-from the number of routed entries.
+row and one entry per selected expert. A candidate passed the explicit token-row
+count into the native expert API and selected layout mode 5 for that shape.
 
-On three representative layers, 120-iteration isolated measurements at one
-token and 18 routed groups were bitwise identical and favored mode 5:
+An initial process-to-process measurement appeared to favor mode 5 by 5.26-6.78%
+on three layers. That result did not reproduce after a clean final build. A
+same-process, 120-iteration comparison at one token and 18 routed groups instead
+favored the existing mode 7 on every layer; output remained bitwise identical:
 
-| Layer | mode 7 | mode 5 | Improvement |
+| Layer | mode 7 | mode 5 | mode 5 change |
 |---:|---:|---:|---:|
-| 0 | 148.0 us | 140.6 us | 5.26% |
-| 23 | 148.1 us | 138.7 us | 6.78% |
-| 47 | 147.0 us | 139.5 us | 5.38% |
+| 0 | 134.0 us | 138.7 us | +3.51% slower |
+| 23 | 133.9 us | 140.2 us | +4.70% slower |
+| 47 | 134.0 us | 137.8 us | +2.84% slower |
 
-Two-token input retained mode 7 and showed no regression. End-to-end results,
-however, did not clear the acceptance threshold. After a fresh load and a
-discarded five-run warm-up, ten 256-token runs produced:
+The end-to-end candidate also failed the acceptance threshold. After a fresh
+load and a discarded five-run warm-up, ten 256-token runs produced:
 
 | Variant | Median | Mean | Range |
 |---|---:|---:|---:|
@@ -54,16 +53,8 @@ discarded five-run warm-up, ten 256-token runs produced:
 The median change was only **+1.11%**, while the mean was lower because of an
 outlier. An earlier five-run sample appeared to show +13.55%; the longer repeat
 demonstrated that this was warm-cache and run-to-run variance, not a defensible
-backend gain.
-
-Consequently mode 7 remains the default. Developers can reproduce the kernel
-experiment with:
-
-```bash
-STRATA_Q2_SINGLE_MODE=5 ./build/strata ...
-```
-
-Unset the variable, or set it to `7`, for the accepted default.
+backend gain. The dispatch and API changes were therefore fully reverted; mode
+7 remains the only default path and no experimental runtime switch is shipped.
 
 ## Aggressive designs evaluated
 
