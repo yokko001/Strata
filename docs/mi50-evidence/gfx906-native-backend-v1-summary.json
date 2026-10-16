@@ -46,11 +46,57 @@
     "accepted_as_default": false,
     "acceptance_threshold_percent": 3.0
   },
+  "one_entry_specialization": {
+    "bitwise_equal": true,
+    "layer23_interleaved_runs": 5,
+    "generic_all_median_us": 138.0,
+    "specialized_all_median_us": 133.9,
+    "isolated_improvement_percent": 3.06,
+    "generic_gate_up_median_us": 85.2,
+    "specialized_gate_up_median_us": 78.7,
+    "generic_down_median_us": 62.3,
+    "specialized_down_median_us": 55.1,
+    "registers": {
+      "generic_gate_up": {"sgpr": 74, "vgpr": 81, "spills": 0},
+      "specialized_gate_up": {"sgpr": 57, "vgpr": 58, "spills": 0},
+      "generic_down": {"sgpr": 58, "vgpr": 80, "spills": 0},
+      "specialized_down": {"sgpr": 49, "vgpr": 54, "spills": 0}
+    },
+    "steady_generation_runs_per_variant": 10,
+    "generic_median_tokens_per_second": 32.867,
+    "specialized_median_tokens_per_second": 32.867,
+    "median_change_percent": 0.0,
+    "implementation_reverted": true
+  },
+  "runtime_probes": {
+    "batch_2": {
+      "expert_cache_entries": 19531,
+      "expert_cache_gib": 25.15,
+      "measured_request_pairs": 5,
+      "aggregate_median_tokens_per_second": 20.454,
+      "aggregate_mean_tokens_per_second": 20.417,
+      "accepted": false
+    },
+    "speculative_decode": [
+      {"spec": 3, "spec_min_p": 0.5, "median_tokens_per_second": 31.656, "accepted": false},
+      {"spec": 4, "spec_min_p": 0.5, "median_tokens_per_second": 32.867, "accepted": true},
+      {"spec": 4, "spec_min_p": 0.7, "median_tokens_per_second": 32.379, "accepted": false},
+      {"spec": 6, "spec_min_p": 0.5, "median_tokens_per_second": 26.207, "accepted": false}
+    ],
+    "pipeline_windows_2": {
+      "applicable": false,
+      "reason": "requires a two-GPU layer split; target is one MI50 32 GB"
+    }
+  },
   "rejected_experiments": [
     {"name": "reuse Q2_0 decode across grouped entries", "result": "0.6-1.5% isolated and inconsistent"},
     {"name": "reuse Q2_0 decode in down projection", "result": "about 1% at T2; slower at T4 and T8"},
     {"name": "fused gate/up activation quantization", "result": "8-11% slower"},
     {"name": "staged packed dot8 activation path", "result": "slower at T2 and about 20% slower at T4 and T8"},
-    {"name": "pre-expanded Q2_0 pack", "result": "rejected on memory and transfer economics before implementation"}
+    {"name": "pre-expanded Q2_0 pack", "result": "rejected on memory and transfer economics before implementation"},
+    {"name": "one-row LDS staging depth", "result": "down projection regressed from 59-62 us to 70-73 us"},
+    {"name": "forced four-wave occupancy", "result": "18-19 VGPR spills and about 40% slower"},
+    {"name": "specialized one-entry Q2_0 kernels", "result": "3.06% isolated gain, 0.00% steady-generation gain"},
+    {"name": "two-slot continuous batching", "result": "20.454 tok/s median aggregate, below single-request throughput"}
   ]
 }
