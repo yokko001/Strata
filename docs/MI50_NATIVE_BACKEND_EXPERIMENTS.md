@@ -104,6 +104,62 @@ also corrects the pinned llama.cpp FP8 feature guard for ROCm 6.2: FP8 types are
 only referenced when the HIP version actually provides them. This makes a
 clean `gfx906` build reproducible without relying on a dirty dependency tree.
 
+### LDS depth and forced occupancy
+
+Reducing the grouped-expert LDS staging depth from four token rows to one was
+bitwise correct but slowed the Q2_0 down projection from roughly 59-62 us to
+70-73 us. The candidate was reverted.
+
+Forcing four waves per SIMD with `amdgpu_waves_per_eu(4)` reduced the reported
+VGPR allocation from about 80 to 64, but the compiler introduced 18-19 VGPR
+spills. The one-token grouped-expert microbenchmark regressed from 132-135 us
+to 183-188 us, about 40%, so occupancy was not forced in the retained source.
+
+### Specialized one-entry Q2_0 kernels
+
+A second candidate compiled dedicated one-entry gate/up and down kernels for
+the common single-token decode shape. It removed the generic one-to-four-entry
+switch and reduced register use without spills:
+
+| Kernel | Generic | One-entry specialized |
+|---|---:|---:|
+| gate/up | 74 SGPR, 81 VGPR | 57 SGPR, 58 VGPR |
+| down | 58 SGPR, 80 VGPR | 49 SGPR, 54 VGPR |
+
+Five interleaved layer-23 runs improved the isolated grouped-expert median from
+138.0 us to 133.9 us (**+3.06%**); gate/up improved by about 8.3% and down by
+about 13.1%. Outputs were bitwise equal, and two-, four-, and eight-token inputs
+fell back to the generic path with bitwise equality.
+
+The gain did not reach model throughput. With the same executable, five
+discarded warm-up runs and ten measured 256-token runs, both the generic mode
+and the specialized mode produced a median of **32.867 tok/s**. The code and
+the temporary native API extension were therefore reverted.
+
+### Continuous batching and speculative decode
+
+The existing two-slot continuous-batching path was also tested before adding a
+new persistent queue. It reduced the expert cache from 20,402 entries
+(26.27 GiB) to 19,531 entries (25.15 GiB). Five pairs of concurrent 256-token
+requests achieved only 20.454 tok/s median aggregate throughput, below the
+single-request baseline even before considering per-request latency. A
+four-slot test was skipped because its additional KV state would reduce expert
+residency further.
+
+The retained speculative settings were checked around the current operating
+point with ten measured 256-token generations per candidate:
+
+| Candidate | Median | Change from 32.867 tok/s baseline |
+|---|---:|---:|
+| `--spec 3 --spec-min-p 0.5` | 31.656 tok/s | -3.7% |
+| `--spec 4 --spec-min-p 0.7` | 32.379 tok/s | -1.5% |
+| `--spec 6 --spec-min-p 0.5` | 26.207 tok/s | -20.3% |
+
+The current `--spec 4 --spec-min-p 0.5` remains the best tested point. A
+`--pipeline-windows 2` probe was rejected at startup because this target is a
+single 32 GB MI50 rather than a two-GPU layer split; the engine correctly left
+the feature off and no timing was attributed to it.
+
 ## Reproduction guidance
 
 Build with the native gfx906 target and avoid compiling unsupported optional
