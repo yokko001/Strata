@@ -3342,8 +3342,15 @@ template<int SG> struct DotG<42, SG> { __device__ static __forceinline__ float f
 constexpr int LDS_RB = 64;    // gate/up rows per block (4 R2 passes of 16)
 constexpr int LDS_NT = 4;     // entries whose activations sit in LDS at once
 
+#if defined(STRATA_HIP_GFX906)
+#define STRATA_Q2_WAVES4(T) __attribute__((amdgpu_waves_per_eu((T) == 42 ? 4 : 1)))
+#else
+#define STRATA_Q2_WAVES4(T)
+#endif
+
 template<int TG, int SG, bool TI = false>
-__global__ void __launch_bounds__(256) native_gu_lds_kernel(const unsigned long long* __restrict__ grp_ptr,
+__global__ void __launch_bounds__(256) STRATA_Q2_WAVES4(TG)
+native_gu_lds_kernel(const unsigned long long* __restrict__ grp_ptr,
                                                             const int32_t* __restrict__ grp_start,
                                                             const int32_t* __restrict__ n_groups,
                                                             const int32_t* __restrict__ ent_tok,
@@ -3438,7 +3445,8 @@ __global__ void __launch_bounds__(256) native_gu_lds_kernel(const unsigned long 
 // ---- 7 (down): the group's q8_1 h rows in LDS, the tokens inside the k loop, the R2 row pairs of mode 2 -
 // the same per-(row, entry) sums in the same order: bitwise the mode-2 output.
 template<int TD>
-__global__ void __launch_bounds__(256) native_down_lds_kernel(const unsigned long long* __restrict__ grp_ptr,
+__global__ void __launch_bounds__(256) STRATA_Q2_WAVES4(TD)
+native_down_lds_kernel(const unsigned long long* __restrict__ grp_ptr,
                                                               const int32_t* __restrict__ grp_start,
                                                               const int32_t* __restrict__ n_groups,
                                                               const int32_t* __restrict__ ent_dst,
@@ -3502,6 +3510,8 @@ __global__ void __launch_bounds__(256) native_down_lds_kernel(const unsigned lon
         }
     }
 }
+
+#undef STRATA_Q2_WAVES4
 
 // ---- 8: mode 7's gate/up with SwiGLU and the q8_1 quantization in the epilogue.  A block takes h rows
 // [r0, r0 + 32): gate rows r0.. and up rows r0.. (64 weight rows, the same per-(row, entry) sums as mode 7), so
