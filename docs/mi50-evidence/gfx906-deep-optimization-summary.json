@@ -1,0 +1,44 @@
+{
+  "target": "AMD Instinct MI50 gfx906",
+  "rocm": "6.2.4",
+  "source_commit": "296b59d2f73c8f04a805df29c2fa97655adace78",
+  "qfuse": {
+    "gr_parity": "pass for T=1..8, direct and graph replay",
+    "tg256_qfuse0_median": 14.217,
+    "tg256_qfuse1_median": 11.489,
+    "change_percent": -19.19,
+    "decision": "rejected: correct but slower on gfx906"
+  },
+  "topk_wave64_fix": {
+    "former_failure": "262144 context with TK_PER_MAX=66 produced non-identical ids",
+    "change": "use TK_PER on STRATA_HIP_GFX906; preserve 66 only for other HIP targets",
+    "qsa_topk_parity": "pass",
+    "qsa_topk_active_parity": "20 cases pass bitwise; 262144 case 64/64 ids identical",
+    "ctx262144_single_query_ms": {"reference": 2.155, "dispatched": 1.915},
+    "ctx262144_eight_query_ms": {"reference": 0.938, "dispatched": 0.878},
+    "decision": "retain correctness fix"
+  },
+  "q2_dot8_two_plane": {
+    "formula": "x = low_signed + 8 + 16 * high_signed",
+    "cpu_reference": "262144 groups exact",
+    "isa": ["v_dot8_i32_i4", "v_dot4_i32_i8"],
+    "preexpanded_speedup": "about 5-9 percent",
+    "raw_q2_dot4_over_dot8_ratios": [0.972, 0.878, 0.952, 0.932, 0.982],
+    "decision": "rejected: unpack, popcount and plane construction make the realistic path 2-12 percent slower"
+  },
+  "final_quality": {
+    "configuration": "STRATA_TOPK_OLD=1; STRATA_QFUSE=0; Top-K wave64 fix",
+    "score": "25/33",
+    "math": "3/8",
+    "knowledge": "6/6",
+    "strict_format": "3/4",
+    "japanese": "2/4",
+    "uncertainty": "3/3",
+    "executed_code": "5/5",
+    "long_context": "3/3 (2K, 8K and 16K)",
+    "elapsed_seconds": 229.377,
+    "comparison": "matches the first unpatched current-main run at 25/33; no quality regression attributable to the Top-K fix"
+  },
+  "final_service_state": "Strata stopped; llama-local intentionally left stopped at user request; no GPU reset or passthrough change",
+  "upstream_pr_created": false
+}
