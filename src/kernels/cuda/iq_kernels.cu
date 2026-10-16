@@ -3707,12 +3707,13 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
 #if defined(STRATA_HIP_GFX906)
     int em0 = exp_mode();
     // A one-token Q2_0 decode has one entry per selected expert and cannot
-    // amortize mode 7's token-in-k-loop state.  On gfx906 mode 5 is faster for
-    // that shape; two or more token rows retain mode 7.  Override with
-    // STRATA_Q2_SINGLE_MODE=7 for an exact same-binary baseline.
+    // amortize mode 7's token-in-k-loop state.  On gfx906 mode 5 is faster in
+    // the isolated expert benchmark, but the end-to-end gain did not clear the
+    // acceptance threshold.  Keep mode 7 by default and expose mode 5 only as
+    // an explicit experiment through STRATA_Q2_SINGLE_MODE=5.
     static const int q2_single_mode = [] {
         const char* v = std::getenv("STRATA_Q2_SINGLE_MODE");
-        return v && v[0] != '\0' ? std::atoi(v) : 5;
+        return v && v[0] != '\0' ? std::atoi(v) : 7;
     }();
     if (token_rows == 1 && em0 == 7 && L.gu_type == 42 && q2_single_mode >= 5 && q2_single_mode <= 7)
         em0 = q2_single_mode;
