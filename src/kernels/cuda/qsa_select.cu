@@ -560,11 +560,15 @@ __global__ void __launch_bounds__(256) block_scores_simt_kernel(const float* __r
 // block_topk_kernel's (radix threshold, ties to the lowest index, cells ascending): identical ids.
 constexpr int TK_T = 1024;
 constexpr int TK_PER = 33;
-#if defined(__HIPCC__)
+#if defined(__HIPCC__) && !defined(STRATA_HIP_GFX906)
 // AMD (RDNA, wave32): a 1,024-thread block may use 192 VGPRs per lane, so the keys of 66 blocks per thread fit - contexts
 // up to 4 * 1024 * 66 = 270,336 cells (the 262,144 --max-context) keep the register kernel. NVIDIA's 64 registers per
 // thread at 1,024 threads allow only TK_PER.
 constexpr int TK_PER_MAX = 66;
+#elif defined(STRATA_HIP_GFX906)
+// Vega 20 is wave64. Keep the proven 33-key limit and use the reference path past its register capacity until a
+// wave64 streaming kernel is available; 66 keys per thread produced non-identical ids at 262,144 tokens on gfx906.
+constexpr int TK_PER_MAX = TK_PER;
 #else
 constexpr int TK_PER_MAX = TK_PER;
 #endif
