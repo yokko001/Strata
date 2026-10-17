@@ -65,12 +65,16 @@ QKV work (3.31 ms), router/plan/doorbell (2.98 ms), head (2.33 ms), `z`
 
 ## What the RAM and NVMe upgrade changes
 
-Adding 64 GB of RAM takes this guest from about 21 GiB to about 85 GiB.  It is
-valuable for IQ3_S and other larger formats because the
-54.8 GB transformer shard, resident expert pool, KV state and filesystem cache
-can coexist without paging.  It also permits a fair current-branch Coder and
-IQ3 comparison.  It does not enlarge MI50 VRAM or reduce the dense and routed
-GPU kernels in a warm Q2_0 window.
+If the whole 64 GB addition is assigned to the VM, it takes this guest from
+about 21 GiB to about 85 GiB.  That is valuable for IQ3_S and other larger
+formats because the host expert complement, dense state and KV allocation can
+coexist without swap.  It does **not** make every IQ3_S file page resident:
+the 54.8 GB transformer data plus the 28.8 GB PLE shard already total 83.6 GB
+before the OS, server, KV state and working buffers.  The practical design is
+to keep the active expert complement in RAM and serve the PLE mmap working set
+from the passthrough SSD.  This permits a fair current-branch Coder and IQ3
+comparison, but does not enlarge MI50 VRAM or reduce the dense and routed GPU
+kernels in a warm Q2_0 window.
 
 A low-latency PCIe-passthrough SSD should hold active packs, the PLE file,
 generated model data and builds.  It improves cold readiness, mmap faults, PLE
