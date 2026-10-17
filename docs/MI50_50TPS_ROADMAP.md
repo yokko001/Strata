@@ -83,6 +83,18 @@ guest block topology, direct-read bandwidth and latency, model cold-start time,
 warm-restart time, major faults, and steady decode.  A virtual PCIe link width
 alone is not evidence of physical locality or achieved bandwidth.
 
+`tools/mi50/host_inventory.py` captures the comparable guest-side subset without
+publishing host names, mount points, device names or source paths.  For example:
+
+```bash
+python3 tools/mi50/host_inventory.py \
+  --path pack=/path/to/packs/q2_0 \
+  --path model=/path/to/model.gguf > host-inventory.json
+```
+
+Run it before and after the upgrade.  The labels are retained, but the supplied
+paths are not written to the JSON.
+
 ## Model decision
 
 1. **Speed track: Q2_0.**  Keep it as the 50 tok/s target.  It is explicitly
