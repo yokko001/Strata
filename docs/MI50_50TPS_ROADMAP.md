@@ -29,6 +29,15 @@ The specific card used for validation is a 32 GB MI50 with ECC enabled,
 CPU expert fallback, pack conversion and cache-miss recovery relatively weak,
 but it is not the dominant cost after the Q2_0 expert cache is warm.
 
+The current guest exposes 8 CPU cores across two virtual sockets, 21 GiB RAM
+and 3.8 GiB swap.  Strata automatically uses seven expert-pool workers plus the
+host thread, so all eight CPUs participate.  The current Q2_0 run keeps 8.68
+GiB of the GPU-cache complement in pageable RAM and reports zero file reads
+after warm-up.  The GGUF shards are still on CIFS (about 127 MB/s in a direct
+2 GiB read); the generated pack is on a 300 GB virtual SCSI disk reported as
+rotational.  These facts make cold start storage-bound but do not make warm
+decode storage-bound.
+
 ## Measured starting points
 
 | Model / path | Steady result | Interpretation |
@@ -36,11 +45,13 @@ but it is not the dominant cost after the Q2_0 expert cache is warm.
 | Qwen3.8-Flash-Next Q2_0, unmodified base | 30.503 tok/s | fixed tg256 baseline |
 | Qwen3.8-Flash-Next Q2_0, retained gfx906 path | 33.930-34.294 tok/s | accepted LDS gate/up path, +11.2-12.4% |
 | Qwen3.8-Flash-Next Q2_0, latest experiment control | 32.867 tok/s | same-binary control used for recent A/B experiments |
+| Qwen3.8-Flash-Next Q2_0, fully warmed 2026-10-17 control | 38.051 tok/s | ten-run median after adaptive-cache convergence; current comparison baseline |
 | Qwen3.8-Flash-Next IQ3_S, v0.1.39 | 19.6 tok/s | 13,397 cached experts, 97.6-98.4% hit rate |
 | Qwen3.8-Flash-Next IQ3_S, calibrated v0.1.40.1 | 26.819 tok/s | best recorded IQ3_S operating point |
 | Qwen3.8-Flash-Next Coder IQ1_M, full cache | 37.2-37.9 tok/s | historical full-cache result; must be repeated on the current branch |
 
-The Q2_0 target therefore needs about **1.46x** over the best retained median.
+The Q2_0 target therefore needs about **1.31x** over the newest fully warmed
+control (or about **1.46x** over the earlier retained-kernel median).
 IQ3_S needs about **1.86x** over its best calibrated median.  Increasing RAM or
 SSD speed alone cannot supply either multiplier.
 
@@ -54,7 +65,8 @@ QKV work (3.31 ms), router/plan/doorbell (2.98 ms), head (2.33 ms), `z`
 
 ## What the RAM and NVMe upgrade changes
 
-Adding 64 GB of RAM is valuable for IQ3_S and other larger formats because the
+Adding 64 GB of RAM takes this guest from about 21 GiB to about 85 GiB.  It is
+valuable for IQ3_S and other larger formats because the
 54.8 GB transformer shard, resident expert pool, KV state and filesystem cache
 can coexist without paging.  It also permits a fair current-branch Coder and
 IQ3 comparison.  It does not enlarge MI50 VRAM or reduce the dense and routed
@@ -98,21 +110,23 @@ is repeatable and greater than 3% with no parity or quality regression.
 
 | Rank | Experiment | Why it is next | Expected scope |
 |---:|---|---|---|
-| 1 | Current-branch Coder IQ1_M full-residency retest after RAM upgrade | Historical 37.9 tok/s is the closest unverified operating point to 50; proves whether capacity removes all host-tier stalls | model/runtime, potentially 5-15% from current Q2 reference but model-specific |
-| 2 | MTP matrix: default vs `--mtp-q4 proj` / `all`, `--mtp-hnorm pooled` / `stream`, with `STRATA_MTP_PROFILE=1` | Useful tokens per verify window can matter more than another small expert microkernel gain; measure draft latency and acceptance together | potentially several percent; rounding/acceptance may change |
-| 3 | `STRATA_LFUSE=1` exact layer-fusion path | It removes launches around the shared expert and KV append, directly targeting the measured small-stage overhead; it has not been measured on MI50 | 0-8%, no format change |
-| 4 | `STRATA_SH_STREAM=1` on gfx906 | Other wave64 AMD cards gained from overlapping shared and routed experts, while other HIP systems regressed; MI50 needs its own A/B | 0-10%, architecture/driver-dependent |
-| 5 | Compiler-only matrix with the runtime/driver fixed | Separates code-generation gains from unsupported driver changes; compare clang scheduling, VGPR/SGPR/LDS and spills | 0-5% expected, low operational risk when binaries are isolated |
-| 6 | Fused wave64 router/plan/doorbell and shared/quantize micrographs | These small stages total about 5 ms per window and are dominated by launch/synchronization latency | 0-8% if barriers are actually removed |
-| 7 | Persistent wave64 expert work queue across the verify window | Amortizes dispatch while retaining the compact Q2_0 representation | 0-10%, high implementation risk |
-| 8 | Offline MI50 Q2 bit-plane pack prototype | Decode activation planes once and reuse them; the prior per-dot conversion was slower | proceed only if isolated packed-path gain exceeds 10% and storage remains close to Q2_0 |
-| 9 | Request batching after residency is protected | The tested two-slot path reduced cache residency and aggregate throughput to 20.454 tok/s | throughput-only; do not use for the 50 tok/s single-stream claim |
+| 1 | Compiler-only matrix with the runtime/driver fixed | Separates code-generation gains from unsupported driver changes; compare clang scheduling, VGPR/SGPR/LDS and spills | 0-5% expected, low operational risk when binaries are isolated |
+| 2 | Fused wave64 router/plan/doorbell and shared/quantize micrographs | These small stages total about 5 ms per window and are dominated by launch/synchronization latency | 0-8% if barriers are actually removed |
+| 3 | Persistent wave64 expert work queue across the verify window | Amortizes dispatch while retaining the compact Q2_0 representation | 0-10%, high implementation risk |
+| 4 | Current-branch Coder IQ1_M full-residency retest after RAM upgrade | Historical 37.9 tok/s is the closest unverified operating point to 50; proves whether capacity removes all host-tier stalls | model/runtime, potentially 5-15% from the earlier Q2 reference but model-specific |
+| 5 | CPU placement sweep: 4-7 workers, host first/last, host participation, task count | The VM spans two four-core virtual sockets; measure rather than assume that cross-socket workers help | likely small in warm Q2 because CPU expert time is already near zero; may reduce tail latency |
+| 6 | RAM/SSD acceptance matrix after installation | Compare swap disabled for the service, resident-page coverage, cold/warm start, major faults and direct I/O latency with identical decode settings | startup and larger-model stability; little expected warm-Q2 gain |
+| 7 | Offline MI50 Q2 bit-plane pack prototype | Decode activation planes once and reuse them; the prior per-dot conversion was slower | proceed only if isolated packed-path gain exceeds 10% and storage remains close to Q2_0 |
+| 8 | Request batching after residency is protected | The tested two-slot path reduced cache residency and aggregate throughput to 20.454 tok/s | throughput-only; do not use for the 50 tok/s single-stream claim |
 
 The following are already rejected and should not be repeated without a new
 mechanism: generic QFUSE, GR split, forced four-wave occupancy, shallower LDS
 staging, one-entry expert specialization, forced one-row Q8 geometry, the
-current two-slot batch implementation, `--spec 3`, `--spec 6`, and a wider
-pre-expanded Q2_0 representation.
+current two-slot batch implementation, `--spec 3`, `--spec 6`, a wider
+pre-expanded Q2_0 representation, `STRATA_LFUSE=1`, `STRATA_SH_STREAM=1`,
+`--mtp-q4 all`, and `--mtp-hnorm stream`.  `--mtp-q4 proj` produced only a
+1.4-2.1% median gain and remains an opt-in research candidate below the 3%
+retention threshold.
 
 ## Upgrade acceptance sequence
 
