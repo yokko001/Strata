@@ -7,7 +7,9 @@
 > [MI50 / gfx906 optimization](docs/MI50_GFX906_OPTIMIZATION.md) for the exact base revision, build recipe,
 > measurements, validation gates, and rejected experiments. The follow-on
 > [MI50-native backend experiments](docs/MI50_NATIVE_BACKEND_EXPERIMENTS.md) cover the more aggressive Q2_0,
-> fusion, batching, and compiler work. Other GPU backends are intended to remain unchanged.
+> fusion, batching, and compiler work. The [50 tok/s roadmap](docs/MI50_50TPS_ROADMAP.md) inventories the hardware,
+> ROCm, model-format and storage constraints and ranks the next experiments. Other GPU backends are intended to
+> remain unchanged.
 
 <p align="center"><b>Run a 125-billion-parameter AI model on your own gaming PC</b><br>
 NVIDIA or AMD graphics card (12 GB or more) · Windows or Linux · free and open source</p>
