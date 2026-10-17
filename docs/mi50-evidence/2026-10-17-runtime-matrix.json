@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-17",
+  "device": "AMD Instinct MI50 32 GB (gfx906, 60 CU, wave64)",
+  "runtime": "ROCm 6.2.4 / HIP 6.2.41134",
+  "protocol": {
+    "model": "Qwen3.8-Flash-Next Q2_0",
+    "response_tokens": 256,
+    "measured_runs": 10,
+    "sampling": "deterministic",
+    "note": "Post-load adaptation runs were discarded. Values are client wall tokens/s. No prompts or model paths are included."
+  },
+  "results": [
+    {
+      "name": "control",
+      "settings": ["STRATA_LFUSE=0", "STRATA_SH_STREAM=0", "MTP Q8 projections/head"],
+      "wall_tps": [34.568, 38.051, 38.720, 37.108, 38.811, 38.113, 38.071, 38.051, 36.657, 37.374],
+      "median": 38.051,
+      "mean": 37.552
+    },
+    {
+      "name": "layer fusion",
+      "settings": ["STRATA_LFUSE=1", "STRATA_SH_STREAM=0"],
+      "wall_tps": [36.774, 34.421, 37.543, 36.509, 37.873, 36.946, 38.343, 37.474, 37.974, 37.928],
+      "median": 37.508,
+      "mean": 37.178,
+      "median_change_percent": -1.43,
+      "decision": "reject"
+    },
+    {
+      "name": "shared expert stream",
+      "settings": ["STRATA_LFUSE=0", "STRATA_SH_STREAM=1"],
+      "wall_tps": [31.827, 27.344, 32.826, 31.277, 31.841, 32.822, 32.490, 31.687, 32.448, 29.205],
+      "median": 31.834,
+      "mean": 31.377,
+      "median_change_percent": -16.34,
+      "decision": "reject"
+    },
+    {
+      "name": "MTP Q4 projections",
+      "settings": ["--mtp-q4 proj"],
+      "wall_tps_first": [30.294, 18.763, 35.456, 39.250, 38.087, 39.582, 40.048, 38.469, 39.661, 39.950],
+      "wall_tps_repeat": [40.124, 38.054, 39.776, 39.605, 37.901, 38.903, 38.559, 38.617, 37.551, 36.783],
+      "median_first": 38.859,
+      "median_repeat": 38.588,
+      "median_change_percent_first": 2.12,
+      "median_change_percent_repeat": 1.41,
+      "decision": "research candidate; below 3% retention gate"
+    },
+    {
+      "name": "MTP Q4 projections and head",
+      "settings": ["--mtp-q4 all"],
+      "wall_tps": [38.300, 39.589, 39.824, 38.735, 37.813, 36.426, 36.869, 38.741, 38.527, 37.803],
+      "median": 38.413,
+      "mean": 38.263,
+      "median_change_percent": 0.95,
+      "decision": "reject; slower than projection-only and adds draft-head quantization risk"
+    },
+    {
+      "name": "MTP per-stream hidden normalization",
+      "settings": ["--mtp-q4 proj", "--mtp-hnorm stream"],
+      "discarded_series_medians": [30.032, 37.475],
+      "observed_range": [16.650, 40.567],
+      "decision": "reject; did not stabilize after 24 full-length adaptation runs"
+    }
+  ]
+}

@@ -183,6 +183,46 @@ were noisy or materially slower. The estimated model-level contribution is
 below the 3% acceptance threshold, so gfx906 keeps the two-row default and the
 override remains an explicit diagnostic control.
 
+## 2026-10-17 runtime and host-resource matrix
+
+A fresh same-binary control was allowed to converge through the adaptive expert
+cache before measurement.  Every retained number below is a ten-run median of
+256 generated tokens.  The compact, path-free evidence is stored in
+[`mi50-evidence/2026-10-17-runtime-matrix.json`](mi50-evidence/2026-10-17-runtime-matrix.json).
+
+| Candidate | Median | Change from 38.051 control | Decision |
+|---|---:|---:|---|
+| Control | 38.051 tok/s | - | baseline |
+| `STRATA_LFUSE=1` | 37.508 tok/s | -1.43% | reject |
+| `STRATA_SH_STREAM=1` | 31.834 tok/s | -16.34% | reject |
+| `--mtp-q4 proj`, first / repeat | 38.859 / 38.588 tok/s | +2.12% / +1.41% | opt-in research candidate; below gate |
+| `--mtp-q4 all` | 38.413 tok/s | +0.95% | reject |
+
+`--mtp-hnorm stream` was stopped before a scored final set: two twelve-run
+adaptation series had medians of 30.032 and 37.475 tok/s and still ranged from
+16.650 to 40.567 tok/s after 24 runs.  Its unstable cache behavior is worse
+than the pooled default.  Q4 projection remains worth revisiting only together
+with draft acceptance/profile data; its observed gain is too small to change a
+public default.
+
+The host inventory explains why RAM and storage changes must be evaluated
+separately from warm decode.  The guest currently has eight available AVX-only
+CPU cores across two virtual sockets, 21 GiB RAM and 3.8 GiB swap.  Automatic
+placement uses seven pool workers plus the host thread and 24 expert tasks per
+phase.  In the warmed Q2_0 run, the 8.68 GiB host complement was resident in
+ordinary pageable RAM and Strata reported zero expert-file reads.  The raw GGUF
+was read from CIFS at about 127 MB/s, while the pack lived on a virtual
+rotational SCSI disk.  Consequently:
+
+- a 64 GiB RAM addition should remove swap pressure and permit IQ3_S/model page
+  residency, but cannot remove the measured warm GPU stages;
+- a passthrough SSD should materially reduce cold load, conversion and page
+  fault latency, but must not be credited as warm tok/s without measurement;
+- the next CPU sweep should compare worker count, host participation, task
+  count and first/last host core because the VM spans two virtual sockets;
+- model and pack placement on the new SSD must be hash-verified, while service
+  credentials and machine-specific paths remain outside the repository.
+
 ## Reproduction guidance
 
 Build with the native gfx906 target and avoid compiling unsupported optional
