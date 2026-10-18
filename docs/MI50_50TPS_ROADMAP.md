@@ -6,10 +6,10 @@ single-request generation above **50 tokens/s**, measured over fixed 256-token
 responses after warm-up.  Throughput from concurrent requests is reported
 separately and must not be substituted for the single-stream target.
 
-Last inventory: 2026-10-17.  The tested branch is based directly on upstream
-commit `296b59d2f73c8f04a805df29c2fa97655adace78`; at the inventory date upstream
-`main` had no commits beyond that base.  The MI50 branch contains 34 focused
-commits on top.
+Last inventory: 2026-10-18.  The branch now includes upstream v0.1.45 plus the
+gfx906 HIP-alignment repair and the missing F16 k-quant prefill build source.
+The deployed engine remains v0.1.40.1 because the newer tree did not pass the
+single-request IQ3_S performance gate.
 
 ## Primary sources and hardware constraints
 
@@ -29,14 +29,11 @@ The specific card used for validation is a 32 GB MI50 with ECC enabled,
 CPU expert fallback, pack conversion and cache-miss recovery relatively weak,
 but it is not the dominant cost after the Q2_0 expert cache is warm.
 
-The current guest exposes 8 CPU cores across two virtual sockets, 21 GiB RAM
-and 3.8 GiB swap.  Strata automatically uses seven expert-pool workers plus the
-host thread, so all eight CPUs participate.  The current Q2_0 run keeps 8.68
-GiB of the GPU-cache complement in pageable RAM and reports zero file reads
-after warm-up.  The GGUF shards are still on CIFS (about 127 MB/s in a direct
-2 GiB read); the generated pack is on a 300 GB virtual SCSI disk reported as
-rotational.  These facts make cold start storage-bound but do not make warm
-decode storage-bound.
+The current guest exposes 4 AVX-only vCPUs and 70 GiB usable RAM.  IQ3_S keeps
+the roughly 46.84 GiB expert arena resident; the server RSS was about 50.5 GiB
+and the process reported no swap.  The existing storage was retained because
+steady decode is resident and GPU-bound.  Storage still affects cold loading,
+pack generation and cache misses, but it is not credited with warm tok/s.
 
 ## Measured starting points
 
@@ -47,12 +44,13 @@ decode storage-bound.
 | Qwen3.8-Flash-Next Q2_0, latest experiment control | 32.867 tok/s | same-binary control used for recent A/B experiments |
 | Qwen3.8-Flash-Next Q2_0, fully warmed 2026-10-17 control | 38.051 tok/s | ten-run median after adaptive-cache convergence; current comparison baseline |
 | Qwen3.8-Flash-Next IQ3_S, v0.1.39 | 19.6 tok/s | 13,397 cached experts, 97.6-98.4% hit rate |
-| Qwen3.8-Flash-Next IQ3_S, calibrated v0.1.40.1 | 26.819 tok/s | best recorded IQ3_S operating point |
+| Qwen3.8-Flash-Next IQ3_S, v0.1.40.1 after 72 GiB allocation | 29.297 tok/s | ten-run median; deployed quality/speed point |
+| Qwen3.8-Flash-Next IQ3_S, v0.1.45 fully warm | 25.046 tok/s | -14.51% from deployed reference; rejected |
 | Qwen3.8-Flash-Next Coder IQ1_M, full cache | 37.2-37.9 tok/s | historical full-cache result; must be repeated on the current branch |
 
 The Q2_0 target therefore needs about **1.31x** over the newest fully warmed
 control (or about **1.46x** over the earlier retained-kernel median).
-IQ3_S needs about **1.86x** over its best calibrated median.  Increasing RAM or
+IQ3_S needs about **1.71x** over its deployed median.  Increasing RAM or
 SSD speed alone cannot supply either multiplier.
 
 The detailed Q2_0 profile measured a 58.97 ms median verify window.  Reaching
@@ -63,29 +61,18 @@ largest reported stages were VRAM expert hits (6.39 ms), waitA (3.62 ms), Q8
 QKV work (3.31 ms), router/plan/doorbell (2.98 ms), head (2.33 ms), `z`
 (2.09 ms), shared/quantize (2.08 ms), and output projection (1.80 ms).
 
-## What the RAM and NVMe upgrade changes
+## What the RAM upgrade changed
 
-If the whole 64 GB addition is assigned to the VM, it takes this guest from
-about 21 GiB to about 85 GiB.  That is valuable for IQ3_S and other larger
-formats because the host expert complement, dense state and KV allocation can
-coexist without swap.  It does **not** make every IQ3_S file page resident:
-the 54.8 GB transformer data plus the 28.8 GB PLE shard already total 83.6 GB
-before the OS, server, KV state and working buffers.  The practical design is
-to keep the active expert complement in RAM and serve the PLE mmap working set
-from the passthrough SSD.  This permits a fair current-branch Coder and IQ3
-comparison, but does not enlarge MI50 VRAM or reduce the dense and routed GPU
-kernels in a warm Q2_0 window.
+The VM now has 72 GB assigned and exposes about 70 GiB to Linux.  This is enough
+for the active IQ3_S expert arena, dense state and working memory to coexist
+without process swap, which makes IQ3_S the practical quality operating point.
+It does not enlarge MI50 VRAM or shorten the dense and routed GPU kernels.
 
-A low-latency PCIe-passthrough SSD should hold active packs, the PLE file,
-generated model data and builds.  It improves cold readiness, mmap faults, PLE
-tail latency, pack conversion and cache-miss recovery.  The canonical raw model
-may remain on slower archival storage.  Once the needed pages and experts are
-resident, SSD bandwidth is not part of the measured steady Q2_0 critical path.
-
-After installation, record physical root-complex placement outside the guest,
-guest block topology, direct-read bandwidth and latency, model cold-start time,
-warm-restart time, major faults, and steady decode.  A virtual PCIe link width
-alone is not evidence of physical locality or achieved bandwidth.
+The planned passthrough SSD was intentionally not installed: after the needed
+experts and pages are resident, storage bandwidth is outside the steady-decode
+critical path.  Revisit NVMe only if cold readiness, conversion time or
+cache-miss latency becomes an explicit goal, and measure those separately from
+warm generation.
 
 `tools/mi50/host_inventory.py` captures the comparable guest-side subset without
 publishing host names, mount points, device names or source paths.  For example:
@@ -104,10 +91,10 @@ paths are not written to the JSON.
 1. **Speed track: Q2_0.**  Keep it as the 50 tok/s target.  It is explicitly
    designed to avoid the lookup-heavy i-quant decode overhead and is the only
    full model format with a plausible path from the current result.
-2. **Quality track: IQ3_S.**  Install it after the RAM/SSD upgrade and benchmark
-   it, but do not forecast 50 tok/s from the hardware upgrade.  The first goal
-   is to beat the calibrated 26.819 tok/s result without cache or storage
-   stalls.
+2. **Quality track: IQ3_S.**  The 72 GiB guest now holds the full expert arena
+   resident and v0.1.40.1 reached a 29.297 tok/s ten-run median.  This is the
+   deployed quality/speed balance, but it is not a plausible 50 tok/s
+   single-stream forecast without a kernel or execution-model change.
 3. **Code-specialized track: Coder IQ1_M.**  Repeat the historical 37.9 tok/s
    full-cache measurement on the current branch.  It is a credible intermediate
    speed candidate, but its reduced expert set is weaker for general chat and
@@ -131,7 +118,7 @@ is repeatable and greater than 3% with no parity or quality regression.
 | 3 | Persistent wave64 expert work queue across the verify window | Amortizes dispatch while retaining the compact Q2_0 representation | 0-10%, high implementation risk |
 | 4 | Current-branch Coder IQ1_M full-residency retest after RAM upgrade | Historical 37.9 tok/s is the closest unverified operating point to 50; proves whether capacity removes all host-tier stalls | model/runtime, potentially 5-15% from the earlier Q2 reference but model-specific |
 | 5 | CPU placement sweep: 4-7 workers, host first/last, host participation, task count | The VM spans two four-core virtual sockets; measure rather than assume that cross-socket workers help | likely small in warm Q2 because CPU expert time is already near zero; may reduce tail latency |
-| 6 | RAM/SSD acceptance matrix after installation | Compare swap disabled for the service, resident-page coverage, cold/warm start, major faults and direct I/O latency with identical decode settings | startup and larger-model stability; little expected warm-Q2 gain |
+| 6 | RAM acceptance and single-engine boot guard | Confirm full IQ3_S residency, zero process swap, and exactly one active model engine after reboot | larger-model stability; prevents false regressions and host lockup |
 | 7 | Offline MI50 Q2 bit-plane pack prototype | Decode activation planes once and reuse them; the prior per-dot conversion was slower | proceed only if isolated packed-path gain exceeds 10% and storage remains close to Q2_0 |
 | 8 | Request batching after residency is protected | The tested two-slot path reduced cache residency and aggregate throughput to 20.454 tok/s | throughput-only; do not use for the 50 tok/s single-stream claim |
 
@@ -147,10 +134,11 @@ retention threshold.
 ## Upgrade acceptance sequence
 
 1. Capture a final pre-upgrade Q2_0 tg256 baseline and hardware telemetry.
-2. Install RAM and the passthrough SSD; verify ECC, NUMA/root-complex placement,
-   block-device identity, sustained cooling and no swapping.
-3. Copy only generated packs and PLE data to the SSD, verify hashes, and retain
-   the archival model copy.
+2. Verify the installed RAM, sustained cooling, process residency and no
+   swapping.  Confirm all legacy model services are disabled or masked before
+   starting the retained engine.
+3. Keep the existing storage layout unless cold-start or conversion time becomes
+   an explicit target; no SSD benefit is assumed for resident warm decode.
 4. Re-measure cold start, warm restart and the unchanged Q2_0 tg256 protocol.
 5. Run the ranked runtime A/B matrix above before changing kernels.
 6. Install IQ3_S only when enough RAM and disk headroom remain; record Q2_0 and

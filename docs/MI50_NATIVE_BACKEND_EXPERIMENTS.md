@@ -223,6 +223,40 @@ rotational SCSI disk.  Consequently:
 - model and pack placement on the new SSD must be hash-verified, while service
   credentials and machine-specific paths remain outside the repository.
 
+## 2026-10-18 72 GiB IQ3_S and v0.1.45 validation
+
+The guest memory increase made the full IQ3_S expert arena practical: the
+process resident set was about 50.5 GiB and the 46.84 GiB expert arena remained
+resident without process swap.  This changes the preferred quality/speed
+operating point from Q2_0 to IQ3_S, but it does not make warm decode a storage
+workload.  No SSD claim is made here.
+
+The upstream v0.1.45 tree was rebuilt for gfx906 after adding the omitted
+`src/prefill/moe_f16_kq.cu` translation unit to `strata_mmq`.  The build and the
+three selected file-source, cache-slot and native-multi parity tests passed.
+End-to-end single-request IQ3_S performance did not pass the deployment gate:
+
+| Candidate | Median | Change / decision |
+|---|---:|---|
+| v0.1.40.1 reference | 29.297 tok/s | deployed reference |
+| v0.1.45 default, fully warm | 25.046 tok/s | -14.51%; reject |
+| v0.1.45 with old grouped path | 22.545 tok/s | reject |
+| v0.1.45 with route-tail skip disabled | 13.883 tok/s | reject |
+| v0.1.45 with the new gfx906 Top-K path | 21.377 tok/s | reject for deployment |
+
+The new Top-K implementation remains a correctness fix, but forcing it in this
+workload was not a speed win.  The service therefore stays on v0.1.40.1 with
+the conservative old Top-K runtime selection while v0.1.45's gfx906
+single-stream regression is investigated.  Compact rates and test metadata are
+in
+[`mi50-evidence/2026-10-18-iq3s-72g-v0145.json`](mi50-evidence/2026-10-18-iq3s-72g-v0145.json).
+
+This rollout also exposed an operational benchmark hazard: two independently
+enabled model services can consume most guest RAM and make both decode and SSH
+unreliable.  Before every retained measurement, verify that exactly one model
+engine is active.  Do not infer a kernel regression from a run made while a
+second engine is loading or resident.
+
 ## Reproduction guidance
 
 Build with the native gfx906 target and avoid compiling unsupported optional
