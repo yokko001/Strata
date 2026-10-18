@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-19",
+  "hardware": {
+    "gpu": "AMD Instinct MI50 32 GB (gfx906)",
+    "guest_memory_gib_visible": 70,
+    "engine": "Strata v0.1.40.1",
+    "model": "Qwen3.8-Flash-Next IQ3_S"
+  },
+  "protocol": {
+    "generated_tokens": 256,
+    "measured_requests_per_series": 10,
+    "temperature_shutdown_c": 88,
+    "cool_power_cap_w": 130
+  },
+  "before": {
+    "guard_step_down_c": 55,
+    "series_medians_tok_s": [27.638, 26.475],
+    "pooled_20_request_median_tok_s": 26.86,
+    "range_tok_s": [21.026, 30.394]
+  },
+  "after": {
+    "guard_step_down_c": 65,
+    "rates_tok_s": [30.721, 30.348, 31.538, 31.741, 33.129, 31.624, 31.741, 31.517, 31.739, 31.807],
+    "median_tok_s": 31.682,
+    "mean_tok_s": 31.59,
+    "range_tok_s": [30.348, 33.129],
+    "change_from_pooled_immediate_control_percent": 17.95,
+    "change_from_prior_29_297_reference_percent": 8.14,
+    "internal_decode_median_tok_s": 32.3,
+    "minimum_expert_hit_rate": 0.994,
+    "expert_file_read_mb": 0.0,
+    "maximum_reported_temperature_c": 59,
+    "final_power_cap_w": 130
+  },
+  "decision": "Retain the 65 C first step-down threshold. Keep the 130 W cool cap, later staged reductions, and 88 C emergency stop.",
+  "notes": [
+    "The previous 55 C threshold oscillated in the normal sustained-decode temperature range.",
+    "The emergency action was updated to stop the active Strata service as well as legacy model services.",
+    "Exactly one model engine was active; no model-file reads occurred during the retained series.",
+    "Host names, paths, prompts, responses, credentials, and service configuration are omitted."
+  ]
+}

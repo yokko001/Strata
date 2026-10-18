@@ -257,6 +257,26 @@ unreliable.  Before every retained measurement, verify that exactly one model
 engine is active.  Do not infer a kernel regression from a run made while a
 second engine is loading or resident.
 
+### Thermal-guard oscillation
+
+After enforcing the single-engine boot rule, two ten-request IQ3_S control
+series still had medians of 27.638 and 26.475 tok/s.  Expert hit rate stayed at
+99.1-99.4%, file reads were zero, and the slow requests appeared periodically.
+The host guard was stepping from its already conservative 130 W cap to 115 W at
+55 C, exactly inside the sustained decode temperature range.
+
+Moving only the first step-down point from 55 C to 65 C removed that
+oscillation.  The later reductions and the 88 C emergency stop remain.  The
+next ten-request series was 30.348-33.129 tok/s with a **31.682 tok/s median**:
+17.95% above the pooled immediate controls and 8.14% above the earlier 29.297
+tok/s reference.  Maximum reported temperature was 59 C, the final cap remained
+130 W, minimum expert hit rate was 99.4%, and expert-file reads remained zero.
+The emergency action must target the currently deployed Strata service, not
+only a legacy llama service.
+
+The compact evidence is in
+[`mi50-evidence/2026-10-19-iq3s-thermal-guard.json`](mi50-evidence/2026-10-19-iq3s-thermal-guard.json).
+
 ## Reproduction guidance
 
 Build with the native gfx906 target and avoid compiling unsupported optional
