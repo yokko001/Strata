@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-18",
+  "hardware": {
+    "gpu": "AMD Instinct MI50 32 GB (gfx906)",
+    "guest_memory_gib_visible": 70,
+    "cpu": "4 vCPU, AVX-only Intel Xeon E5-2609 class",
+    "rocm": "6.2.4"
+  },
+  "model": {
+    "family": "Qwen3.8-Flash-Next",
+    "quantization": "IQ3_S",
+    "context": 32768,
+    "speculation": 4,
+    "kv": "int8"
+  },
+  "protocol": {
+    "generated_tokens": 256,
+    "warmup_requests": 3,
+    "measured_requests": 10,
+    "statistic": "median tokens/s"
+  },
+  "results": {
+    "v0.1.40.1_reference": {
+      "rates": [26.829, 28.451, 29.759, 29.242, 30.646, 29.845, 29.352, 27.893, 29.454, 28.991],
+      "median": 29.297
+    },
+    "v0.1.45_default_first_series": {
+      "rates": [18.709, 20.764, 22.560, 24.740, 22.561, 22.840, 25.978, 26.102, 20.916, 21.467],
+      "median": 22.560
+    },
+    "v0.1.45_default_fully_warm": {
+      "rates": [20.455, 22.771, 24.759, 25.879, 27.051, 23.647, 25.333, 30.412, 29.904, 22.339],
+      "median": 25.046,
+      "change_from_reference_percent": -14.51
+    },
+    "v0.1.45_old_grouped": {
+      "median": 22.545,
+      "decision": "reject"
+    },
+    "v0.1.45_route_tail_skip_off": {
+      "median": 13.883,
+      "decision": "reject"
+    },
+    "v0.1.45_new_topk": {
+      "median": 21.377,
+      "decision": "reject for deployment; keep source fix for correctness"
+    }
+  },
+  "validation": {
+    "build": "pass",
+    "tests": [
+      "file_expert_source_test",
+      "expert_cache_slot_guard_test",
+      "native_multi_parity"
+    ],
+    "tests_passed": 3,
+    "tests_failed": 0
+  },
+  "decision": "Keep v0.1.40.1 as the deployed IQ3_S engine until the v0.1.45 single-stream gfx906 regression is resolved.",
+  "notes": [
+    "The v0.1.45 build required adding src/prefill/moe_f16_kq.cu to strata_mmq.",
+    "Results are warm single-request decode rates, not aggregate multi-request throughput.",
+    "Machine-specific paths, host names, prompts, responses, credentials, and service configuration are intentionally omitted."
+  ]
+}
