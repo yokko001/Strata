@@ -204,6 +204,9 @@ class GpuLists(unittest.TestCase):
                 self.assertNotIn("defs", calls)
                 setup.build_engine_hip({"arch": "gfx1101"}, root)   # another arch: compiled again
                 self.assertIn("-DCMAKE_HIP_ARCHITECTURES=gfx1101", calls["defs"])
+                setup.build_engine_hip({"arch": "gfx906"}, root)
+                self.assertIn("-DCMAKE_HIP_ARCHITECTURES=gfx906", calls["defs"])
+                self.assertIn("-DSTRATA_HIP_GFX906=ON", calls["defs"])
             finally:
                 for k, v in saved.items():
                     setattr(setup, k, v)
