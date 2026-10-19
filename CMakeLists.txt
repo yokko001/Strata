@@ -1451,6 +1451,21 @@ if(STRATA_NATIVE_EXPERTS)
     set(GGML_NATIVE ON CACHE BOOL "" FORCE)
   endif()
   if(STRATA_GGML_DIR)
+    if(STRATA_HIP_GFX906)
+      # setup.py supplies its downloaded llama.cpp tree through STRATA_GGML_DIR.  Apply the same ROCm 6.2 header
+      # correction as the FetchContent path below; otherwise that supported setup path still fails on
+      # __hip_fp8_e4m3 before any gfx906 kernel is linked.
+      set(_strata_hip_vendor "${STRATA_GGML_DIR}/ggml/src/ggml-cuda/vendors/hip.h")
+      file(READ "${_strata_hip_vendor}" _strata_hip_vendor_text)
+      string(REPLACE "#if HIP_VERSION >= 60200000" "#if HIP_VERSION >= 60300000"
+                     _strata_hip_vendor_fixed "${_strata_hip_vendor_text}")
+      if(NOT _strata_hip_vendor_fixed STREQUAL _strata_hip_vendor_text)
+        file(WRITE "${_strata_hip_vendor}" "${_strata_hip_vendor_fixed}")
+      endif()
+      unset(_strata_hip_vendor_fixed)
+      unset(_strata_hip_vendor_text)
+      unset(_strata_hip_vendor)
+    endif()
     add_subdirectory(${STRATA_GGML_DIR}/ggml ${CMAKE_BINARY_DIR}/ggml EXCLUDE_FROM_ALL)
   else()
     include(FetchContent)
