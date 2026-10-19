@@ -2991,15 +2991,20 @@ def rocm_root(archs):
     (root, library folders).  A system ROCm 7 with hipcc, hipBLAS and the HIP development files (#446), else AMD's
     TheRock wheels (rocm_wanted: a version per card family, from the family's index) installed into .venv."""
     archs = [archs] if isinstance(archs, str) else list(archs)
+    gfx906_only = set(archs) == {"gfx906"}
     sysroot = Path(os.environ.get("ROCM_PATH") or "/opt/rocm")
     if (sysroot / "bin" / "hipcc").exists() and list((sysroot / "lib").glob("libhipblas.so*")):
         ver = rocm_version(sysroot)
         missing = rocm_dev_missing(sysroot)
-        if (ver is None or ver >= ROCM_SYSTEM_MIN) and not missing:
+        # CDNA1 was removed from newer packaged toolchains.  gfx906 therefore deliberately uses the
+        # system ROCm 6.x documented in ROCm_6_3_3.md, while every other HIP target keeps the ROCm 7 floor.
+        version_ok = ver is None or ((6, 0) <= ver < (7, 0) if gfx906_only else ver >= ROCM_SYSTEM_MIN)
+        if version_ok and not missing:
             return sysroot, [str(sysroot / "lib")]
-        if ver is not None and ver < ROCM_SYSTEM_MIN:
-            warn(f"the ROCm in {sysroot} is {ver[0]}.{ver[1]}; Strata needs {ROCM_SYSTEM_MIN[0]}.{ROCM_SYSTEM_MIN[1]} "
-                 "or newer: using AMD's wheels in .venv instead")
+        if ver is not None and not version_ok:
+            need = "ROCm 6.x" if gfx906_only else f"ROCm {ROCM_SYSTEM_MIN[0]}.{ROCM_SYSTEM_MIN[1]} or newer"
+            warn(f"the ROCm in {sysroot} is {ver[0]}.{ver[1]}; Strata needs {need} for "
+                 f"{', '.join(archs)}: using AMD's wheels in .venv instead")
         else:                                          # #446: a runtime-only ROCm (no -dev packages): cmake would fail
             warn(f"the ROCm in {sysroot} has no HIP development files ({', '.join(missing)}): using AMD's wheels in "
                  ".venv instead (or install them, e.g. AMD's amdrocm-core-dev package for your ROCm and card)")
