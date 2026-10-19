@@ -159,6 +159,20 @@ class GpuLists(unittest.TestCase):
                         cfg.unlink()
                         (sysroot / "include/hip/hip_runtime.h").unlink()
 
+    def test_gfx906_accepts_system_rocm_6(self):
+        """gfx906 is the exception to the ROCm 7 floor: CDNA1 uses the documented system ROCm 6.x toolchain."""
+        with tempfile.TemporaryDirectory() as d:
+            sysroot = Path(d)
+            for rel, text in (("bin/hipcc", ""), ("lib/libhipblas.so.2", ""),
+                              ("include/rocm-core/rocm_version.h",
+                               "#define ROCM_VERSION_MAJOR 6\n#define ROCM_VERSION_MINOR 2\n"),
+                              ("lib/cmake/hip-lang/hip-lang-config.cmake", ""),
+                              ("include/hip/hip_runtime.h", "")):
+                (sysroot / rel).parent.mkdir(parents=True, exist_ok=True)
+                (sysroot / rel).write_text(text)
+            with mock.patch.dict(setup.os.environ, {"ROCM_PATH": d}):
+                self.assertEqual(setup.rocm_root(["gfx906"]), (sysroot, [str(sysroot / "lib")]))
+
     def test_build_for_every_arch(self):
         """build_engine_hip compiles for the set of the chosen cards' archs and records it in BUILD.json."""
         calls = {}
