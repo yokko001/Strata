@@ -207,6 +207,9 @@ class GpuLists(unittest.TestCase):
                 setup.build_engine_hip({"arch": "gfx906"}, root)
                 self.assertIn("-DCMAKE_HIP_ARCHITECTURES=gfx906", calls["defs"])
                 self.assertIn("-DSTRATA_HIP_GFX906=ON", calls["defs"])
+                self.assertIn("-DSTRATA_ENABLE_HIP=OFF", calls["defs"])
+                self.assertIn("-DSTRATA_PREFILL_MMQ=OFF", calls["defs"])
+                self.assertNotIn("-DSTRATA_ENABLE_HIP=ON", calls["defs"])
             finally:
                 for k, v in saved.items():
                     setattr(setup, k, v)
