@@ -1,0 +1,57 @@
+{
+  "warmup": {
+    "tokens": 32,
+    "elapsed_s": 11.196,
+    "wall_tps": 2.858,
+    "usage": {
+      "prompt_tokens": 30,
+      "completion_tokens": 32,
+      "total_tokens": 62,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "runs": [
+    {
+      "tokens": 256,
+      "elapsed_s": 28.602,
+      "wall_tps": 8.95,
+      "usage": {
+        "prompt_tokens": 30,
+        "completion_tokens": 256,
+        "total_tokens": 286,
+        "prompt_tokens_details": {
+          "cached_tokens": 23
+        }
+      }
+    },
+    {
+      "tokens": 256,
+      "elapsed_s": 30.436,
+      "wall_tps": 8.411,
+      "usage": {
+        "prompt_tokens": 30,
+        "completion_tokens": 256,
+        "total_tokens": 286,
+        "prompt_tokens_details": {
+          "cached_tokens": 23
+        }
+      }
+    },
+    {
+      "tokens": 256,
+      "elapsed_s": 19.553,
+      "wall_tps": 13.093,
+      "usage": {
+        "prompt_tokens": 30,
+        "completion_tokens": 256,
+        "total_tokens": 286,
+        "prompt_tokens_details": {
+          "cached_tokens": 23
+        }
+      }
+    }
+  ],
+  "median_wall_tps": 8.95
+}

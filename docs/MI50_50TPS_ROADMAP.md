@@ -114,8 +114,8 @@ is repeatable and greater than 3% with no parity or quality regression.
 | Rank | Experiment | Why it is next | Expected scope |
 |---:|---|---|---|
 | 1 | Compiler-only matrix with the runtime/driver fixed | Separates code-generation gains from unsupported driver changes; compare clang scheduling, VGPR/SGPR/LDS and spills | 0-5% expected, low operational risk when binaries are isolated |
-| 2 | Fused wave64 router/plan/doorbell and shared/quantize micrographs | These small stages total about 5 ms per window and are dominated by launch/synchronization latency | 0-8% if barriers are actually removed |
-| 3 | Persistent wave64 expert work queue across the verify window | Amortizes dispatch while retaining the compact Q2_0 representation | 0-10%, high implementation risk |
+| 2 | Fused shared/quantize micrographs, excluding the rejected Top-K substitutions | Router/MMVF/doorbell substitution was slower end to end in the synthetic chain; only a true cross-stage fusion is still open | 0-5% if launches and barriers are actually removed |
+| 3 | Persistent wave64 expert work queue across requests, without a whole-grid barrier | The hyper-connection persistent kernel was 1.19-3.42x faster alone but made tg256 20.31% slower, implicating monopolization/scheduling rather than arithmetic | 0-10%, high implementation risk |
 | 4 | Current-branch Coder IQ1_M full-residency retest after RAM upgrade | Historical 37.9 tok/s is the closest unverified operating point to 50; proves whether capacity removes all host-tier stalls | model/runtime, potentially 5-15% from the earlier Q2 reference but model-specific |
 | 5 | CPU placement sweep: 4-7 workers, host first/last, host participation, task count | The VM spans two four-core virtual sockets; measure rather than assume that cross-socket workers help | likely small in warm Q2 because CPU expert time is already near zero; may reduce tail latency |
 | 6 | RAM acceptance and single-engine boot guard | Confirm full IQ3_S residency, zero process swap, and exactly one active model engine after reboot | larger-model stability; prevents false regressions and host lockup |
@@ -129,7 +129,10 @@ current two-slot batch implementation, `--spec 3`, `--spec 6`, a wider
 pre-expanded Q2_0 representation, `STRATA_LFUSE=1`, `STRATA_SH_STREAM=1`,
 `--mtp-q4 all`, and `--mtp-hnorm stream`.  `--mtp-q4 proj` produced only a
 1.4-2.1% median gain and remains an opt-in research candidate below the 3%
-retention threshold.
+retention threshold.  Also rejected are the logical-wave32
+`STRATA_HC_PERSIST=1` implementation as a deployed path, alternate portable /
+serial / gfx906-fast Top-K substitutions in the full router chain, BF16 MMVF
+prefetch, and the exact-target compiler variant.
 
 ## Upgrade acceptance sequence
 

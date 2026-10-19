@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-19",
+  "target": "single AMD Instinct MI50 32 GiB (gfx906, wave64)",
+  "power_cap_w": 130,
+  "model": "Qwen3.8-Flash-Next IQ3_S",
+  "candidate": "STRATA_HC_PERSIST logical-wave32 port",
+  "implementation": {
+    "explicit_shuffle_widths": [32, 16, 2],
+    "resident_blocks": 80,
+    "compute_units": 60,
+    "startup_gate": "parity plus grid-barrier residency probe for T=1..8",
+    "default": "off"
+  },
+  "correctness": {
+    "token_counts": [1, 2, 3, 4, 5, 6, 7, 8],
+    "timed_out_token_counts": 0,
+    "startup_max_relative_difference": 1.8e-7,
+    "external_test_max_relative_difference": 3.12e-7,
+    "repeatability": "two persistent runs bitwise equal for every T",
+    "result": "pass"
+  },
+  "microbenchmark_us": [
+    {"tokens": 1, "default": 57.56, "persistent": 39.94, "speedup": 1.44},
+    {"tokens": 2, "default": 60.96, "persistent": 51.17, "speedup": 1.19},
+    {"tokens": 3, "default": 71.73, "persistent": 57.16, "speedup": 1.25},
+    {"tokens": 4, "default": 81.01, "persistent": 63.40, "speedup": 1.28},
+    {"tokens": 5, "default": 95.16, "persistent": 73.48, "speedup": 1.30},
+    {"tokens": 6, "default": 105.60, "persistent": 80.57, "speedup": 1.31},
+    {"tokens": 7, "default": 131.26, "persistent": 87.32, "speedup": 1.50},
+    {"tokens": 8, "default": 310.52, "persistent": 90.85, "speedup": 3.42}
+  ],
+  "end_to_end_tg256": {
+    "off_rates_tps": [12.351, 11.395, 11.972, 16.017, 19.951, 22.921, 15.431, 21.638, 23.170, 20.643],
+    "off_median_tps": 17.984,
+    "on_prewarms_tps": [8.950, 8.411, 13.093],
+    "on_rates_tps": [13.242, 15.075, 14.478, 18.387, 14.848, 13.936, 10.438, 14.187, 14.126, 15.819],
+    "on_median_tps": 14.332,
+    "median_change_percent": -20.31,
+    "caveat": "Both series were affected by a v0.1.45 RAM-resident expert load and paging; the ON series nevertheless followed three explicit 256-token prewarms and did not approach the OFF median.",
+    "decision": "reject for deployment; keep as an opt-in research path"
+  },
+  "other_candidates": {
+    "router_chain_full_us_per_layer": {
+      "native": 63.35,
+      "hip_fast_variant": 68.40,
+      "portable_variant": 107.97,
+      "serial_variant": 98.05
+    },
+    "bf16_mmvf_prefetch_full_us_per_layer": {
+      "off": 63.35,
+      "on": 63.36
+    },
+    "compiler_exact_target_native_expert_us": {
+      "base": 171.1,
+      "exact_target": 171.2
+    }
+  }
+}

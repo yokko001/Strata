@@ -6,6 +6,7 @@
 #include "strata/kernels/bf16_gemv.hpp"
 #include "strata/kernels/elementwise.hpp"
 #include "strata/kernels/native_router.hpp"
+#include "strata/kernels/router_top10.hpp"
 #include "strata/kernels/verify_kernels.hpp"
 
 #include <cuda_runtime.h>
@@ -27,6 +28,11 @@ int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     const int T = argc > 1 ? std::atoi(argv[1]) : 2;
     const int reps = argc > 2 ? std::atoi(argv[2]) : 20;
+    // -1 is the engine's native fused router; 0..2 select the HIP variants
+    // exposed by router_top10_variant. This bench-only switch makes the whole
+    // GEMV -> Top-K -> publish chain comparable without changing model output.
+    const int router_variant = std::getenv("STRATA_ROUTER_CHAIN_VARIANT")
+        ? std::atoi(std::getenv("STRATA_ROUTER_CHAIN_VARIANT")) : -1;
     const int L = 48, N = 2560, NE = 512, KK = 10;
     std::mt19937 rng(3);
     std::normal_distribution<float> nd(0.f, 1.f);
@@ -149,7 +155,13 @@ int main(int argc, char** argv) {
         for (int l = 0; l < L; ++l) {
             if (mode == 0) K::gpu_stamp((unsigned long long*) dz, 0, s);
             if (mode & 1) K::bf16_gemv_fp32_mmvf_multi(dx, N, dw[l], dlog, NE, N, NE, T, s);
-            if (mode & 2) K::native_router_top10_multi(dlog, dids, dwt, T, s);
+            if (mode & 2) {
+                if (router_variant < 0) K::native_router_top10_multi(dlog, dids, dwt, T, s);
+                else if (!K::router_top10_variant(dlog, T, NE, KK, dids, dwt, s, router_variant)) {
+                    std::fprintf(stderr, "STRATA_ROUTER_CHAIN_VARIANT=%d is unsupported\n", router_variant);
+                    return 2;
+                }
+            }
             if (mode & 4) K::doorbell_publish_res(dx, dids, dres, NE, (int64_t) T * N, (int64_t) T * KK, dxo, dids_o, dseq, s);
         }
         CK(cudaStreamEndCapture(s, &g));

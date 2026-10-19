@@ -7,6 +7,7 @@
 // magnitude, and two runs of the persistent read must agree bit for bit. Where the card does not hold the 80 blocks at
 // once (or on CUDA, where the read is not built) the read reports that it did not run and the test passes as a skip.
 // `--off`: with STRATA_HC_PERSIST unset the persistent read must never run (the default path is untouched).
+// `--bench`: after each parity case, time the default and persistent paths with HIP events.
 // GPU, synthetic, no model.
 #include "strata/kernels/fused_gr.hpp"
 
@@ -51,7 +52,11 @@ T* dev(size_t n) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    const bool off = argc > 1 && std::strcmp(argv[1], "--off") == 0;
+    bool off = false, bench = false;
+    for (int i = 1; i < argc; ++i) {
+        off = off || std::strcmp(argv[i], "--off") == 0;
+        bench = bench || std::strcmp(argv[i], "--bench") == 0;
+    }
     if (off) unsetenv("STRATA_HC_PERSIST");
     else setenv("STRATA_HC_PERSIST", "1", 1);
     k::fused_gr_check();
@@ -143,6 +148,36 @@ int main(int argc, char** argv) {
         std::printf("T=%d: max relative difference %.3g against the default read, %s, two runs %s  %s\n", T, rel,
                     finite ? "finite" : "NON-FINITE", same ? "bitwise equal" : "DIFFER", ok ? "ok" : "FAIL");
         if (!ok) ++bad;
+        if (bench && ok) {
+            constexpr int warmup = 40, iters = 500;
+            cudaEvent_t begin = nullptr, end = nullptr;
+            ck(cudaEventCreate(&begin), "event begin");
+            ck(cudaEventCreate(&end), "event end");
+            auto time_us = [&](bool persistent) {
+                ck(cudaMemcpy(dR, R.data(), R.size() * 4, cudaMemcpyHostToDevice), "bench R");
+                for (int i = 0; i < warmup; ++i) {
+                    if (persistent) (void) k::fused_gr_read_persist(a, T, nullptr);
+                    else k::fused_gr_read_multi(a, T, dxn, nullptr);
+                }
+                ck(cudaDeviceSynchronize(), "bench warmup");
+                ck(cudaEventRecord(begin), "event record begin");
+                for (int i = 0; i < iters; ++i) {
+                    if (persistent) (void) k::fused_gr_read_persist(a, T, nullptr);
+                    else k::fused_gr_read_multi(a, T, dxn, nullptr);
+                }
+                ck(cudaEventRecord(end), "event record end");
+                ck(cudaEventSynchronize(end), "event sync");
+                float ms = 0.0f;
+                ck(cudaEventElapsedTime(&ms, begin, end), "event elapsed");
+                return 1000.0f * ms / (float) iters;
+            };
+            const float default_us = time_us(false);
+            const float persist_us = time_us(true);
+            std::printf("T=%d bench: default %.2f us, persistent %.2f us, speedup %.2fx (%+.1f%%)\n", T,
+                        default_us, persist_us, default_us / persist_us, 100.0f * (default_us / persist_us - 1.0f));
+            ck(cudaEventDestroy(begin), "event destroy begin");
+            ck(cudaEventDestroy(end), "event destroy end");
+        }
     }
     if (off) std::printf("%s: STRATA_HC_PERSIST unset, the persistent read never ran\n", bad ? "FAIL" : "PASS");
     else if (ran == 0) std::printf("SKIP: the persistent read is not used on this card\n");
