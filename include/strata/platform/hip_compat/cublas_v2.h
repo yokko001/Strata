@@ -18,12 +18,7 @@
 #define CUBLAS_OP_N HIPBLAS_OP_N
 #define CUBLAS_OP_T HIPBLAS_OP_T
 #define CUBLAS_GEMM_DEFAULT HIPBLAS_GEMM_DEFAULT
-#if HIP_VERSION < 60300000
-// ROCm 6.2's hipblasGemmStridedBatchedEx still takes hipblasDatatype_t for computeType.
-#define CUBLAS_COMPUTE_32F HIPBLAS_R_32F
-#else
 #define CUBLAS_COMPUTE_32F HIPBLAS_COMPUTE_32F
-#endif
 #define CUDA_R_32F HIP_R_32F
 #define CUDA_R_16F HIP_R_16F
 #define CUDA_R_16BF HIP_R_16BF
