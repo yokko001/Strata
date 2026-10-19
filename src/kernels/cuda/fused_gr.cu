@@ -2694,7 +2694,7 @@ __global__ void __launch_bounds__(THREADS) persist_kernel(PArgs f) {
         if constexpr (DP) {
             double ss = (double) r.x * r.x + (double) r.y * r.y + (double) r.z * r.z + (double) r.w * r.w;
 #pragma unroll
-            for (int o = 16; o > 0; o >>= 1) ss += __shfl_xor(ss, o);
+            for (int o = 16; o > 0; o >>= 1) ss += __shfl_xor(ss, o, 32);
             if (lane == 0) f.sspd[k * NB + b] = ss;
         } else {
             const float ss = warp_sum(r.x * r.x + r.y * r.y + r.z * r.z + r.w * r.w);   // warp k = token k
@@ -2716,7 +2716,7 @@ __global__ void __launch_bounds__(THREADS) persist_kernel(PArgs f) {
             A v;
             if constexpr (DP) v = dot8d(w, &xs[k][hl * 8]); else v = dot8(w, &xs[k][hl * 8]);
 #pragma unroll
-            for (int o = 8; o > 0; o >>= 1) v += __shfl_xor(v, o);
+            for (int o = 8; o > 0; o >>= 1) v += __shfl_xor(v, o, 16);
             acc[k] = v;
         }
 #pragma unroll
@@ -2804,7 +2804,7 @@ __global__ void __launch_bounds__(THREADS) persist_kernel(PArgs f) {
         }
         float acc[T];
 #pragma unroll
-        for (int k = 0; k < T; ++k) acc[k] = (float) (v[k] + __shfl_xor(v[k], 1));
+        for (int k = 0; k < T; ++k) acc[k] = (float) (v[k] + __shfl_xor(v[k], 1, 2));
         if (uh == 0) {
             const float wn = a0.w_norm[ui];
 #pragma unroll
@@ -2884,9 +2884,18 @@ void fused_gr_persist_init() {
     cudaDeviceProp prop{};
     cudaGetDeviceProperties(&prop, dev);
     if (prop.warpSize != 32) {
+#if defined(STRATA_HIP_GFX906)
+        // gfx906 executes wave64, but this kernel partitions every shuffle into explicit logical
+        // 32/16/2-lane groups.  The startup parity/residency probe below remains the final gate.
+        if (prop.warpSize == 64) {
+            std::fprintf(stderr, "strata hc: CUDA%d: testing STRATA_HC_PERSIST=1 with logical wave32 on gfx906 wave64\n", dev);
+        } else
+#endif
+        {
         std::fprintf(stderr, "strata hc: CUDA%d: STRATA_HC_PERSIST=1 is off here: the kernel is written for 32-lane waves "
                              "(this card runs %d)\n", dev, prop.warpSize);
         return;
+        }
     }
     if (strata::kernels::gfx_arch_is_gfx12(prop.gcnArchName) || strata::kernels::gfx_arch_is_gfx11_wmma(prop.gcnArchName)) {
         std::fprintf(stderr, "strata hc: CUDA%d: STRATA_HC_PERSIST=1 is off here: gfx11 / gfx12 have no s_memrealtime for the barrier "

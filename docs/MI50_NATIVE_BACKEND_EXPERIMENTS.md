@@ -277,6 +277,30 @@ only a legacy llama service.
 The compact evidence is in
 [`mi50-evidence/2026-10-19-iq3s-thermal-guard.json`](mi50-evidence/2026-10-19-iq3s-thermal-guard.json).
 
+### Logical-wave32 persistent hyper-connection read
+
+The upstream persistent hyper-connection read was disabled on gfx906 because
+it assumed 32-lane waves.  The MI50 experiment made the three implicit shuffle
+partitions explicit (32, 16 and 2 lanes) and allowed the existing startup
+parity/residency probe to gate gfx906.  All T=1..8 cases kept 80 blocks resident
+on 60 CUs, timed out zero times, differed from the default path by at most
+3.12e-7, and repeated bitwise identically.
+
+The isolated kernel result was strong: T=1 fell from 57.56 to 39.94 us and T=8
+from 310.52 to 90.85 us.  End-to-end IQ3_S generation moved in the opposite
+direction.  With the same experimental binary and 130 W cap, the OFF series
+had a 17.984 tok/s median and the ON series, after three explicit 256-token
+prewarms, had a 14.332 tok/s median (-20.31%).  Both series were affected by
+the v0.1.45 RAM-resident expert load and paging, but the candidate is far below
+the retention gate.  It remains opt-in research code and is not deployed.
+
+The same round rejected the alternate router kernels in a full synthetic
+router/MMVF/doorbell chain: native was 63.35 us/layer, the gfx906 fast Top-K
+variant 68.40, portable 107.97 and serial 98.05.  BF16 MMVF prefetch was neutral
+(63.35 vs 63.36 us/layer), and an exact-target compiler build was also neutral
+(171.1 vs 171.2 us in the native-expert probe).  Raw and compact evidence is in
+[`mi50-evidence/2026-10-19-wave64-candidate-ab.json`](mi50-evidence/2026-10-19-wave64-candidate-ab.json).
+
 ## Reproduction guidance
 
 Build with the native gfx906 target and avoid compiling unsupported optional
@@ -301,7 +325,8 @@ small sample look more than ten percentage points better than the repeat.
 The remaining work should focus on changes that increase useful residency or
 amortize expert dispatch without inflating the streamed weight representation:
 
-1. persistent wave64 work queues spanning multiple concurrent requests;
+1. persistent wave64 expert work queues spanning multiple concurrent requests,
+   with no whole-grid barrier and no 80-block monopolization;
 2. request-level continuous batching with latency bounds, measured at 2, 4,
    and 8 active decode rows;
 3. a density-preserving Q2_0 bit-plane pack prototype with an offline converter;
