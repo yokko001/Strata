@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-19",
+  "hardware": {
+    "gpu": "AMD Instinct MI50 32 GiB (gfx906, PCIe passthrough)",
+    "cpu": "Intel Xeon E5-2609, 4 vCPU, AVX without AVX2",
+    "ram_gib": 72,
+    "gpu_power_cap_w": 130
+  },
+  "candidate": {
+    "model": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+    "bytes": 18556689568,
+    "engine": "llama.cpp b11062, build 3cf03257f",
+    "gpu_layers": 999,
+    "flash_attention": true,
+    "kv_cache": "Q8_0 K / Q8_0 V",
+    "context": 32768
+  },
+  "llama_bench": {
+    "repetitions": 5,
+    "pp512_tps_mean": 913.43,
+    "pp512_tps_sd": 7.84,
+    "tg256_tps_mean": 71.17,
+    "tg256_tps_sd": 0.83
+  },
+  "openai_api_tg256": {
+    "runs": [62.639, 54.119, 59.25, 57.671, 60.395, 60.813, 61.802, 63.861, 62.399, 61.987],
+    "median_wall_tps": 61.308,
+    "min_wall_tps": 54.119,
+    "max_wall_tps": 63.861
+  },
+  "varied_uncached_prompts_tps": [55.91, 58.8, 55.41, 58.37, 56.91],
+  "long_generation": {
+    "requested_max_tokens": 2048,
+    "natural_stop_tokens": 982,
+    "wall_tps": 58.662
+  },
+  "context_scaling": {
+    "q8_kv": [
+      {"prompt_tokens": 4031, "prompt_tps": 781.63, "decode_tps": 48.30},
+      {"prompt_tokens": 16032, "prompt_tps": 556.37, "decode_tps": 30.48}
+    ],
+    "q4_kv": [
+      {"prompt_tokens": 4033, "prompt_tps": 791.79, "decode_tps": 49.08},
+      {"prompt_tokens": 16034, "prompt_tps": 565.33, "decode_tps": 30.67}
+    ]
+  },
+  "decision": "Keep as a measured fallback, not the default: it exceeds 50 tok/s at short context but falls below the target around 4K context and is an older coding-specialized model. Continue with Qwen3.6-35B-A3B UD-Q4_K_XL plus MTP."
+}

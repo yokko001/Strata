@@ -1,0 +1,77 @@
+{
+  "date": "2026-10-19",
+  "hardware": {
+    "gpu": "AMD Instinct MI50 32 GiB (gfx906, PCIe passthrough)",
+    "cpu": "Intel Xeon E5-2609, 4 vCPU, AVX without AVX2",
+    "ram_gib": 72,
+    "gpu_power_cap_w": 130
+  },
+  "candidate": {
+    "model": "Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf",
+    "bytes": 22853663008,
+    "engine": "Strata gfx906 HIP native Qwen3.6 engine",
+    "context": 32768,
+    "mtp_drafts": 2,
+    "all_routed_experts_in_vram_gib": 18.75,
+    "startup_vram_free_before_routed_experts_gib": 22.90
+  },
+  "decode_tg256_mtp2_default_thinking": {
+    "runs_tps": [97.3, 99.9, 95.8, 91.6, 93.3, 96.2, 99.1, 91.9, 95.6, 98.6],
+    "median_tps": 96.0,
+    "mean_tps": 95.93,
+    "min_tps": 91.6,
+    "max_tps": 99.9
+  },
+  "production_decode_tg256_no_thinking": {
+    "runs_tps": [83.6, 82.4, 88.4, 86.2, 85.9, 80.7, 75.4, 74.8, 77.2, 79.3],
+    "median_tps": 81.55,
+    "mean_tps": 81.39,
+    "min_tps": 74.8,
+    "max_tps": 88.4,
+    "wall_median_seconds": 3.316
+  },
+  "long_generation": {
+    "completion_tokens": 1024,
+    "finish_reason": "length",
+    "decode_tps": 79.5,
+    "mtp_drafts_accepted": 533,
+    "mtp_drafts_proposed": 980
+  },
+  "context_scaling_mtp2": [
+    {"prompt_tokens": 2869, "prompt_tps": 1014.6, "decode_tps": 75.8},
+    {"prompt_tokens": 11719, "prompt_tps": 825.5, "decode_tps": 45.9}
+  ],
+  "mtp_depth_ab": {
+    "mtp1": {"short_median_tps": 90.1, "prompt_2869_decode_tps": 72.0, "prompt_11719_decode_tps": 47.5},
+    "mtp2": {"short_median_tps": 96.0, "prompt_2869_decode_tps": 75.8, "prompt_11719_decode_tps": 45.9},
+    "mtp4": {"short_median_tps": 74.9, "prompt_2869_decode_tps": 59.4, "prompt_11719_decode_tps": 39.3}
+  },
+  "rejected_or_inapplicable": [
+    "Qwen3.6 ignores the generic --kv q4_0/int8/k8v4 flags; its dedicated engine currently stores KV in fp16.",
+    "MTP depth 4 increased verification cost and reduced throughput at every measured context.",
+    "MTP depth 6 was not run after the monotonic regression at depth 4.",
+    "CPU pool tuning is inapplicable when every routed expert is resident in MI50 VRAM."
+  ],
+  "quality_gate": {
+    "thinking_disabled_request": {"chat_template_kwargs": {"enable_thinking": false}},
+    "passed": [
+      "Japanese technical explanation",
+      "237*48 exact arithmetic",
+      "strict JSON object",
+      "order-preserving Python deduplication",
+      "Bayes setup and intermediate arithmetic"
+    ]
+  },
+  "production_state": {
+    "strata_service_active": true,
+    "strata_service_enabled": true,
+    "api_proxy_active": true,
+    "open_webui_active": true,
+    "thermal_guard_active": true,
+    "llama_services_active": false,
+    "llama_services_enabled": false,
+    "idle_vram_bytes": 30087208960,
+    "idle_gpu_temperature_c": 41
+  },
+  "decision": "Selected as the production default. It materially improves quality/capability over the previous fallback while exceeding 50 tok/s for short and medium contexts. MTP depth 2 gives the best measured normal-workload balance; very long context remains the next optimization target."
+}
